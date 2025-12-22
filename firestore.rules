@@ -1,0 +1,54 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isUser(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    // Companies Collection
+    match /companies/{companyId} {
+      // Allow reading company info to check existence during signup
+      allow read: if true; 
+      // Allow creation during first user signup or seeding
+      allow write: if true;
+
+      // Nested Users Collection
+      match /users/{userId} {
+        
+        // Helper to check if the requestor is a manager of this company
+        function isManagerOfCompany() {
+           // This is a bit complex in rules without a custom claim, 
+           // but we can trust the client creation for now or look up the manager doc.
+           // For simplicity in this prototype, we'll assume if you can read the user doc you might be a manager
+           // But better: checks if the requesting user's document has role 'manager' in this company
+           return get(/databases/$(database)/documents/companies/$(companyId)/users/$(request.auth.uid)).data.role == 'manager';
+        }
+
+        // Users can read/write their own profile
+        allow read, write: if isUser(userId);
+        // Managers of the same company can read employee profiles and update status
+        allow read, update: if isManagerOfCompany();
+
+        // Nested Activities Collection
+        match /activities/{activityId} {
+          // Owner (Employee) can read/write their own activities
+          allow read, create: if isUser(userId);
+          allow update: if isUser(userId) || isManagerOfCompany();
+          // Managers can read all activities, create new ones (assign), and delete
+          allow read, create, delete: if isManagerOfCompany();
+        }
+      }
+    }
+    // Allow collection group query for users finding their own profile
+    match /{path=**}/users/{userId} {
+      allow read, write: if request.auth.uid == resource.data.uid;
+    }
+  }
+}

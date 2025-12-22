@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+:root {
+  --primary-color: #0f172a;
+  /* Slate 900 */
+  --secondary-color: #334155;
+  /* Slate 700 */
+  --accent-color: #3b82f6;
+  /* Blue 500 */
+  --background-color: #f8fafc;
+  /* Slate 50 */
+  --text-color: #1e293b;
+  /* Slate 800 */
+}
+
+body {
+  background-color: var(--background-color);
+  color: var(--text-color);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
