@@ -1,8 +1,10 @@
-import React, { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import React from 'react';
+import { Toaster } from 'react-hot-toast';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
+import SkeletonLayout from './components/SkeletonLayout';
 import Signup from './pages/Signup';
 import CompleteProfile from './pages/CompleteProfile';
 import SeedData from './pages/SeedData';
@@ -14,7 +16,7 @@ import ManagerDashboard from './pages/ManagerDashboard';
 function RootRedirect() {
   const { currentUser, userProfile, loading } = useAuth();
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) return <SkeletonLayout />;
 
   if (!currentUser) {
     return <Navigate to="/login" />;
@@ -36,7 +38,8 @@ function App() {
   return (
     <Router>
       <AuthProvider>
-        <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
+        <Toaster position="top-right" />
+        <div className="min-h-screen bg-[var(--background-color)] text-[var(--text-primary)] font-sans">
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />

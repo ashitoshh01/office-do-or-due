@@ -3,102 +3,46 @@ import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import Layout from '../components/Layout';
 import UploadModal from '../components/UploadModal';
-import { collection, query, onSnapshot, orderBy, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, updateDoc } from 'firebase/firestore';
 import { Check, Clock, AlertCircle, Briefcase, Hand } from 'lucide-react';
+import { useTasks } from '../hooks/useTasks';
+import { useFileUpload } from '../hooks/useFileUpload';
+import toast from 'react-hot-toast';
 
 export default function EmployeeDashboard() {
     const { userProfile } = useAuth();
-    const [tasks, setTasks] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const { tasks, loading } = useTasks(userProfile);
+    const { uploadProof, uploading } = useFileUpload(userProfile);
+
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [activeTaskId, setActiveTaskId] = useState(null);
-    const [isRequestingWork, setIsRequestingWork] = useState(false);
+    const [updatingStatus, setUpdatingStatus] = useState(false);
 
-    // Initial Status Check
-    useEffect(() => {
-        if (userProfile?.status === 'requesting_task' && !isRequestingWork) {
-            setIsRequestingWork(true);
-        } else if (userProfile?.status !== 'requesting_task' && isRequestingWork) {
-            setIsRequestingWork(false);
-        }
-    }, [userProfile, isRequestingWork]);
-
-    // Fetch Tasks
-    useEffect(() => {
-        if (!userProfile) return;
-
-        const activitiesRef = collection(db, "companies", userProfile.companyId, "users", userProfile.uid, "activities");
-        const q = query(activitiesRef, orderBy("createdAt", "desc"));
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedTasks = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-            setTasks(fetchedTasks);
-            setLoading(false);
-        }, (error) => {
-            console.error("Error fetching tasks:", error);
-            setLoading(false);
-        });
-
-        return () => unsubscribe();
-    }, [userProfile]);
+    const isRequestingTask = userProfile?.status === 'requesting_task';
 
     const toggleRequestWork = async () => {
-        const newStatus = isRequestingWork ? 'active' : 'requesting_task';
-        setIsRequestingWork(!isRequestingWork);
+        const newStatus = isRequestingTask ? 'active' : 'requesting_task';
+        setUpdatingStatus(true);
 
         try {
             const userRef = doc(db, "companies", userProfile.companyId, "users", userProfile.uid);
             await updateDoc(userRef, { status: newStatus });
+            toast.success(newStatus === 'requesting_task' ? "Work requested successfully!" : "Request cancelled.");
         } catch (error) {
             console.error("Error updating status:", error);
-            alert("Failed to update status");
-            setIsRequestingWork(!isRequestingWork); // Revert UI
+            toast.error("Failed to update status");
+        } finally {
+            setUpdatingStatus(false);
         }
     };
 
     const handleUploadProof = async (uploadPayload) => {
-        // uploadPayload: { type: 'file'|'link', data: File|string }
         if (!activeTaskId) return;
 
-        try {
-            let proofData = null;
-            let proofType = uploadPayload.type;
-
-            if (proofType === 'file') {
-                const file = uploadPayload.data;
-                if (file.size > 700 * 1024) {
-                    alert("File too large! Max size is 700KB. Use 'Paste Link' instead.");
-                    return;
-                }
-
-                // Convert to Base64
-                const toBase64 = file => new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.readAsDataURL(file);
-                    reader.onload = () => resolve(reader.result);
-                    reader.onerror = error => reject(error);
-                });
-                proofData = await toBase64(file);
-            } else {
-                // Link
-                proofData = uploadPayload.data;
-            }
-
-            const taskRef = doc(db, "companies", userProfile.companyId, "users", userProfile.uid, "activities", activeTaskId);
-            await updateDoc(taskRef, {
-                status: 'verification_pending',
-                proofUrl: proofData,
-                proofType: proofType, // 'file' or 'link'
-                completedAt: new Date().toISOString()
-            });
+        const success = await uploadProof(activeTaskId, uploadPayload);
+        if (success) {
             setShowUploadModal(false);
             setActiveTaskId(null);
-        } catch (error) {
-            console.error("Error updating task:", error);
-            alert("Failed to submit proof");
         }
     };
 
@@ -142,12 +86,14 @@ export default function EmployeeDashboard() {
 
                         <button
                             onClick={toggleRequestWork}
+                            disabled={updatingStatus}
                             className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors shadow-sm w-full md:w-auto
-                                ${isRequestingWork
+                                ${isRequestingTask
                                     ? 'bg-orange-100 text-orange-700 border border-orange-200'
-                                    : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'}`}
+                                    : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'}
+                                ${updatingStatus ? 'opacity-70 cursor-wait' : ''}`}
                         >
-                            {isRequestingWork ? (
+                            {isRequestingTask ? (
                                 <>
                                     <span className="relative flex h-3 w-3 mr-1">
                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
@@ -166,7 +112,23 @@ export default function EmployeeDashboard() {
 
                 {/* Task List */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                    {tasks.length === 0 ? (
+                    {loading ? (
+                        <div className="p-5 space-y-4">
+                            {[1, 2, 3].map((i) => (
+                                <div key={i} className="flex justify-between items-start animate-pulse">
+                                    <div className="flex-1 space-y-2">
+                                        <div className="flex items-center gap-2">
+                                            <div className="h-5 w-48 bg-slate-200 rounded"></div>
+                                            <div className="h-4 w-12 bg-slate-200 rounded"></div>
+                                        </div>
+                                        <div className="h-4 w-3/4 bg-slate-200 rounded"></div>
+                                        <div className="h-3 w-32 bg-slate-200 rounded"></div>
+                                    </div>
+                                    <div className="h-8 w-24 bg-slate-200 rounded"></div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : tasks.length === 0 ? (
                         <div className="p-16 text-center text-slate-500 flex flex-col items-center">
                             <Briefcase size={48} className="text-slate-300 mb-4" />
                             <h3 className="text-lg font-medium text-slate-900">No tasks assigned yet</h3>
@@ -231,6 +193,7 @@ export default function EmployeeDashboard() {
                     <UploadModal
                         onClose={() => { setShowUploadModal(false); setActiveTaskId(null); }}
                         onUpload={handleUploadProof}
+                        uploading={uploading}
                     />
                 )}
             </div>

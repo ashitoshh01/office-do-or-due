@@ -1,15 +1,48 @@
-import React, { useState, useRef } from 'react';
-import { Upload, Camera, X } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Upload, Camera, X, Check, File, Link as LinkIcon, AlertCircle } from 'lucide-react';
 
-const UploadModal = ({ onClose, onUpload }) => {
+const UploadModal = ({ onClose, onUpload, uploading: externalUploading }) => {
     const [dragActive, setDragActive] = useState(false);
     const [uploadMode, setUploadMode] = useState('file'); // 'file' or 'link'
     const [linkUrl, setLinkUrl] = useState('');
+    const [internalUploading, setInternalUploading] = useState(false);
+    const uploading = externalUploading || internalUploading;
+
+    const [progress, setProgress] = useState(0);
+    const [error, setError] = useState(null);
     const fileInputRef = useRef(null);
+    const modalRef = useRef(null);
+
+    // Initial animation effect
+    const [isVisible, setIsVisible] = useState(false);
+    useEffect(() => {
+        setIsVisible(true);
+    }, []);
+
+    const simulateUpload = (data, type) => {
+        setInternalUploading(true);
+        setProgress(0);
+
+        const interval = setInterval(() => {
+            setProgress((prev) => {
+                if (prev >= 100) {
+                    clearInterval(interval);
+                    setTimeout(() => {
+                        onUpload({ type, data });
+                        // Don't close immediately to show 100% success state briefly if needed
+                        // But typically we might wait for parent to handle it.
+                        // For now we'll assume parent handles closing or state update.
+                    }, 500);
+                    return 100;
+                }
+                return prev + Math.random() * 15;
+            });
+        }, 300);
+    };
 
     const handleFileSelect = (e) => {
         if (e.target.files && e.target.files[0]) {
-            onUpload({ type: 'file', data: e.target.files[0] });
+            validateAndUpload(e.target.files[0]);
         }
     };
 
@@ -28,92 +61,196 @@ const UploadModal = ({ onClose, onUpload }) => {
         e.stopPropagation();
         setDragActive(false);
         if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-            onUpload({ type: 'file', data: e.dataTransfer.files[0] });
+            validateAndUpload(e.dataTransfer.files[0]);
         }
     };
 
+    const validateAndUpload = (file) => {
+        // Simple size validation (max 5MB just as an example default, kept tight for "proof")
+        if (file.size > 5 * 1024 * 1024) {
+            setError("File size exceeds 5MB limit.");
+            return;
+        }
+        setError(null);
+        simulateUpload(file, 'file');
+    };
+
+    const handleLinkSubmit = () => {
+        if (!linkUrl) return;
+        setInternalUploading(true);
+        // Simulate quick verify
+        setTimeout(() => {
+            onUpload({ type: 'link', data: linkUrl });
+        }, 1000);
+    };
+
+    const handleClose = () => {
+        setIsVisible(false);
+        setTimeout(onClose, 200); // Wait for exit animation
+    };
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div
+            className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 transition-opacity duration-300 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
+            onClick={(e) => { if (e.target === e.currentTarget && !uploading) handleClose(); }}
+        >
+            <div
+                ref={modalRef}
+                className={`bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden transform transition-all duration-300 ${isVisible ? 'scale-100 translate-y-0' : 'scale-95 translate-y-4'}`}
+            >
 
                 {/* Header */}
-                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                    <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2 font-display">
                         Upload Proof
                     </h3>
-                    <div className="flex bg-slate-100 rounded p-0.5 mx-4">
+                    <button
+                        onClick={handleClose}
+                        disabled={uploading}
+                        className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-full transition-all disabled:opacity-50"
+                    >
+                        <X size={20} />
+                    </button>
+                </div>
+
+                {/* Tabs */}
+                {!uploading && (
+                    <div className="flex px-6 pt-6 gap-4">
                         <button
                             onClick={() => setUploadMode('file')}
-                            className={`text-xs px-3 py-1 rounded transition-colors font-medium ${uploadMode === 'file' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
+                            className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 border ${uploadMode === 'file'
+                                ? 'border-blue-100 bg-blue-50 text-blue-700 shadow-sm'
+                                : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                                }`}
                         >
                             Upload File
                         </button>
                         <button
                             onClick={() => setUploadMode('link')}
-                            className={`text-xs px-3 py-1 rounded transition-colors font-medium ${uploadMode === 'link' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
+                            className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 border ${uploadMode === 'link'
+                                ? 'border-blue-100 bg-blue-50 text-blue-700 shadow-sm'
+                                : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                                }`}
                         >
                             Paste Link
                         </button>
                     </div>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
-                        <X size={20} />
-                    </button>
-                </div>
+                )}
 
                 {/* Body */}
-                <div className="p-8">
-                    {uploadMode === 'file' ? (
-                        <div
-                            className={`border-2 border-dashed rounded-2xl p-10 text-center transition-all cursor-pointer
-                                ${dragActive ? 'border-blue-500 bg-blue-50' : 'border-slate-300 hover:border-slate-400 hover:bg-slate-50'}`}
-                            onDragEnter={handleDrag}
-                            onDragLeave={handleDrag}
-                            onDragOver={handleDrag}
-                            onDrop={handleDrop}
-                            onClick={() => fileInputRef.current?.click()}
-                        >
-                            <div className="w-12 h-12 mx-auto mb-4 text-slate-400">
-                                <Upload size={48} strokeWidth={1.5} />
+                <div className="p-6">
+                    {uploading ? (
+                        <div className="py-8 text-center animate-in fade-in zoom-in duration-300">
+                            <div className="w-16 h-16 mx-auto mb-6 relative">
+                                <svg className="w-full h-full transform -rotate-90">
+                                    <circle
+                                        cx="32"
+                                        cy="32"
+                                        r="28"
+                                        stroke="currentColor"
+                                        strokeWidth="4"
+                                        fill="none"
+                                        className="text-slate-100"
+                                    />
+                                    <circle
+                                        cx="32"
+                                        cy="32"
+                                        r="28"
+                                        stroke="currentColor"
+                                        strokeWidth="4"
+                                        fill="none"
+                                        className="text-blue-600 transition-all duration-300 ease-out"
+                                        strokeDasharray={175.9}
+                                        strokeDashoffset={175.9 - (progress / 100) * 175.9}
+                                    />
+                                </svg>
+                                <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-blue-700">
+                                    {Math.round(progress)}%
+                                </div>
                             </div>
-                            <h4 className="text-base font-semibold text-slate-900 mb-2">
-                                Drop your proof here
-                            </h4>
-                            <p className="text-sm text-slate-500 mb-4">
-                                or <span className="text-blue-600 font-semibold">click to browse</span>
-                            </p>
-
-                            <input
-                                type="file"
-                                ref={fileInputRef}
-                                onChange={handleFileSelect}
-                                className="hidden"
-                                accept="image/*,application/pdf"
-                            />
-                            <p className="text-xs text-slate-400 mt-4">Max 700KB</p>
+                            <h4 className="text-lg font-semibold text-slate-800 mb-2">Uploading Proof...</h4>
+                            <p className="text-slate-500 text-sm">Please wait while we secure your file.</p>
                         </div>
                     ) : (
-                        <div className="text-center py-4">
-                            <p className="text-sm text-slate-600 mb-4">Paste a publicly accessible link (Google Drive, Dropbox, etc.)</p>
-                            <input
-                                type="url"
-                                placeholder="https://..."
-                                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mb-4"
-                                value={linkUrl}
-                                onChange={(e) => setLinkUrl(e.target.value)}
-                            />
-                            <button
-                                onClick={() => {
-                                    if (linkUrl) onUpload({ type: 'link', data: linkUrl });
-                                }}
-                                disabled={!linkUrl}
-                                className="w-full bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            >
-                                Submit Link
-                            </button>
-                        </div>
+                        <>
+                            {uploadMode === 'file' ? (
+                                <div
+                                    className={`relative group border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 cursor-pointer overflow-hidden
+                                        ${dragActive
+                                            ? 'border-blue-500 bg-blue-50/50 scale-[1.02]'
+                                            : 'border-slate-300 bg-slate-50/30 hover:border-slate-400 hover:bg-slate-50 hover:shadow-inner'}`}
+                                    onDragEnter={handleDrag}
+                                    onDragLeave={handleDrag}
+                                    onDragOver={handleDrag}
+                                    onDrop={handleDrop}
+                                    onClick={() => fileInputRef.current?.click()}
+                                >
+                                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white shadow-sm border border-slate-100 flex items-center justify-center text-blue-500 group-hover:text-blue-600 group-hover:scale-110 transition-all duration-300">
+                                        <Upload size={28} strokeWidth={2} />
+                                    </div>
+                                    <h4 className="text-base font-semibold text-slate-800 mb-2">
+                                        Drop your proof here
+                                    </h4>
+                                    <p className="text-sm text-slate-500 mb-6 max-w-[200px] mx-auto">
+                                        <span className="text-blue-600 font-medium hover:underline">Click to browse</span> or drag and drop your file
+                                    </p>
+
+                                    {error && (
+                                        <div className="mx-auto max-w-xs flex items-center justify-center gap-2 text-red-500 text-xs bg-red-50 py-2 px-3 rounded-lg mb-4 animate-bounce">
+                                            <AlertCircle size={14} /> {error}
+                                        </div>
+                                    )}
+
+                                    <div className="flex items-center justify-center gap-4 text-xs text-slate-400 font-medium uppercase tracking-wide">
+                                        <span className="bg-slate-100 px-2 py-1 rounded">PDF</span>
+                                        <span className="bg-slate-100 px-2 py-1 rounded">JPG</span>
+                                        <span className="bg-slate-100 px-2 py-1 rounded">PNG</span>
+                                    </div>
+
+                                    <input
+                                        type="file"
+                                        ref={fileInputRef}
+                                        onChange={handleFileSelect}
+                                        className="hidden"
+                                        accept="image/*,application/pdf"
+                                    />
+                                </div>
+                            ) : (
+                                <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
+                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                        <p className="text-sm text-slate-600 mb-3 flex items-center gap-2">
+                                            <LinkIcon size={16} className="text-blue-500" />
+                                            Paste a public link (Drive, Dropbox, etc.)
+                                        </p>
+                                        <input
+                                            type="url"
+                                            placeholder="https://..."
+                                            className="w-full px-4 py-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none text-slate-800 placeholder:text-slate-400"
+                                            value={linkUrl}
+                                            onChange={(e) => setLinkUrl(e.target.value)}
+                                            autoFocus
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={handleLinkSubmit}
+                                        disabled={!linkUrl}
+                                        className="w-full bg-slate-900 text-white py-3.5 rounded-xl font-medium hover:bg-slate-800 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-slate-900/10 flex items-center justify-center gap-2"
+                                    >
+                                        Submit Proof Link
+                                        <Check size={18} />
+                                    </button>
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
 
+                {/* Footer hint */}
+                {!uploading && uploadMode === 'file' && (
+                    <div className="bg-slate-50 px-6 py-3 border-t border-slate-100 text-center">
+                        <p className="text-xs text-slate-500">Max file size: 5MB • Secure transmission</p>
+                    </div>
+                )}
             </div>
         </div>
     );

@@ -1,20 +1,40 @@
 @import "tailwindcss";
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 :root {
+  /* Deep Navy Blue */
   --primary-color: #0f172a;
   /* Slate 900 */
-  --secondary-color: #334155;
-  /* Slate 700 */
+
+  /* Slate Gray */
+  --secondary-color: #64748b;
+  /* Slate 500 */
+
+  /* Success Green */
+  --success-color: #10b981;
+  /* Emerald 500 */
+
+  /* Accent Blue (keeping for primary actions) */
   --accent-color: #3b82f6;
   /* Blue 500 */
+
+  /* Backgrounds */
   --background-color: #f8fafc;
   /* Slate 50 */
-  --text-color: #1e293b;
+  --surface-color: #ffffff;
+
+  /* Text */
+  --text-primary: #1e293b;
   /* Slate 800 */
+  --text-secondary: #475569;
+  /* Slate 600 */
 }
 
 body {
   background-color: var(--background-color);
-  color: var(--text-color);
+  color: var(--text-primary);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }

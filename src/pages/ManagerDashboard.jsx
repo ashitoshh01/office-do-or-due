@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
-import { collection, query, getDocs, doc, updateDoc, addDoc, onSnapshot, orderBy, increment, getDoc } from 'firebase/firestore';
+import { collection, query, doc, updateDoc, addDoc, onSnapshot, orderBy, increment, getDoc } from 'firebase/firestore';
 import { Menu, X, DollarSign, Users, Briefcase } from 'lucide-react';
 
 export default function ManagerDashboard() {
@@ -57,6 +57,7 @@ export default function ManagerDashboard() {
 
         } catch (error) {
             console.error("Error setting up listener:", error);
+            // eslint-disable-next-line
             setLoading(false);
         }
     }, [userProfile]);

@@ -1,27 +1,9 @@
 import React, { useState } from 'react';
-import { Shield, Building, LogOut, LayoutDashboard, CheckSquare, User, Menu, X } from 'lucide-react';
+import { Building, LogOut, LayoutDashboard, Menu, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 
-const Layout = ({ children }) => {
-    const { userProfile, logout } = useAuth();
-    const navigate = useNavigate();
-    const location = useLocation();
-    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-    // Determine title based on role
-    const appTitle = userProfile?.companyName || 'Office App';
-    const role = userProfile?.role || 'employee';
-
-    const handleLogout = async () => {
-        try {
-            await logout();
-            navigate('/login');
-        } catch (error) {
-            console.error("Failed to log out", error);
-        }
-    };
-
+const SidebarContent = ({ appTitle, role, navigate, location, userProfile, handleLogout, setIsMobileMenuOpen }) => {
     const navItemStyle = (path) => ({
         display: 'flex',
         alignItems: 'center',
@@ -29,8 +11,8 @@ const Layout = ({ children }) => {
         padding: '12px 16px',
         borderRadius: '8px',
         width: '100%',
-        color: location.pathname === path ? '#2563EB' : '#64748B', // Blue-600 vs Slate-500
-        backgroundColor: location.pathname === path ? '#EFF6FF' : 'transparent', // Blue-50
+        color: location.pathname === path ? '#2563EB' : '#64748B',
+        backgroundColor: location.pathname === path ? '#EFF6FF' : 'transparent',
         fontWeight: location.pathname === path ? 600 : 500,
         textDecoration: 'none',
         marginBottom: '4px',
@@ -38,7 +20,7 @@ const Layout = ({ children }) => {
         transition: 'all 0.2s'
     });
 
-    const SidebarContent = () => (
+    return (
         <>
             <div className="h-16 flex items-center px-6 border-b border-slate-100">
                 <Building className="text-blue-600 mr-2" size={24} />
@@ -78,12 +60,42 @@ const Layout = ({ children }) => {
             </div>
         </>
     );
+};
+
+const Layout = ({ children }) => {
+    const { userProfile, logout } = useAuth();
+    const navigate = useNavigate();
+    const location = useLocation();
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+    // Determine title based on role
+    const appTitle = userProfile?.companyName || 'Office App';
+    const role = userProfile?.role || 'employee';
+
+    const handleLogout = async () => {
+        try {
+            await logout();
+            navigate('/login');
+        } catch (error) {
+            console.error("Failed to log out", error);
+        }
+    };
+
+    const sidebarProps = {
+        appTitle,
+        role,
+        navigate,
+        location,
+        userProfile,
+        handleLogout,
+        setIsMobileMenuOpen
+    };
 
     return (
         <div className="min-h-screen bg-slate-50 flex">
             {/* Desktop Sidebar */}
             <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col fixed h-full z-10">
-                <SidebarContent />
+                <SidebarContent {...sidebarProps} />
             </aside>
 
             {/* Mobile Header */}
@@ -114,7 +126,7 @@ const Layout = ({ children }) => {
                         >
                             <X size={20} />
                         </button>
-                        <SidebarContent />
+                        <SidebarContent {...sidebarProps} />
                     </aside>
                 </div>
             )}
