@@ -34,41 +34,46 @@ function RootRedirect() {
   return <Navigate to="/user-dashboard" />;
 }
 
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from './lib/queryClient';
+
 function App() {
   return (
-    <Router>
-      <AuthProvider>
-        <Toaster position="top-right" />
-        <div className="min-h-screen bg-[var(--background-color)] text-[var(--text-primary)] font-sans">
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/complete-profile" element={<CompleteProfile />} />
-            <Route path="/seed" element={<SeedData />} />
+    <QueryClientProvider client={queryClient}>
+      <Router>
+        <AuthProvider>
+          <Toaster position="top-right" />
+          <div className="min-h-screen bg-[var(--background-color)] text-[var(--text-primary)] font-sans">
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
+              <Route path="/complete-profile" element={<CompleteProfile />} />
+              <Route path="/seed" element={<SeedData />} />
 
-            <Route path="/" element={<RootRedirect />} />
+              <Route path="/" element={<RootRedirect />} />
 
-            <Route
-              path="/user-dashboard"
-              element={
-                <ProtectedRoute allowedRoles={['employee']}>
-                  <EmployeeDashboard />
-                </ProtectedRoute>
-              }
-            />
+              <Route
+                path="/user-dashboard"
+                element={
+                  <ProtectedRoute allowedRoles={['employee']}>
+                    <EmployeeDashboard />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route
-              path="/manager-dashboard"
-              element={
-                <ProtectedRoute allowedRoles={['manager']}>
-                  <ManagerDashboard />
-                </ProtectedRoute>
-              }
-            />
-          </Routes>
-        </div>
-      </AuthProvider>
-    </Router>
+              <Route
+                path="/manager-dashboard"
+                element={
+                  <ProtectedRoute allowedRoles={['manager']}>
+                    <ManagerDashboard />
+                  </ProtectedRoute>
+                }
+              />
+            </Routes>
+          </div>
+        </AuthProvider>
+      </Router>
+    </QueryClientProvider>
   );
 }
 

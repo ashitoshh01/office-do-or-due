@@ -1,145 +1,64 @@
-import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
+import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { collection, query, doc, updateDoc, addDoc, onSnapshot, orderBy, increment, getDoc } from 'firebase/firestore';
-import { Menu, X, DollarSign, Users, Briefcase } from 'lucide-react';
+import { Menu, X, Trophy, Users, Briefcase, Star, Award, Zap } from 'lucide-react';
+import { useEmployees, useEmployeeTasks, useAssignTask, useVerifyTask, useLeaderboard } from '../hooks/useReactQueryTasks';
 
 export default function ManagerDashboard() {
     const { userProfile, logout } = useAuth();
-    const [employees, setEmployees] = useState([]);
-    const [selectedEmployee, setSelectedEmployee] = useState(null);
-    const [employeeTasks, setEmployeeTasks] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [showMobileSidebar, setShowMobileSidebar] = useState(false);
 
-    // New Task State
+    // React Query Hooks
+    const { data: employees = [], isLoading: loadingEmployees } = useEmployees(userProfile);
+    const { data: leaderboard = [] } = useLeaderboard(userProfile);
+    const { mutate: assignTask, isLoading: assigningLoading } = useAssignTask(userProfile);
+    const { mutate: verifyTaskMutation } = useVerifyTask(userProfile);
+
+    // Local State
+    const [selectedEmployee, setSelectedEmployee] = useState(null);
+    const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Task fetching for selected employee
+    const { data: employeeTasks = [] } = useEmployeeTasks(userProfile, selectedEmployee?.uid);
+
+    // New Task Form State
     const [newTaskTitle, setNewTaskTitle] = useState('');
     const [newTaskDesc, setNewTaskDesc] = useState('');
-    const [newTaskAmount, setNewTaskAmount] = useState(''); // Salary Amount
-    const [attachmentType, setAttachmentType] = useState('file'); // 'file' or 'link'
+    const [newTaskPoints, setNewTaskPoints] = useState('');
+    const [attachmentType, setAttachmentType] = useState('file');
     const [attachmentFile, setAttachmentFile] = useState(null);
     const [attachmentLink, setAttachmentLink] = useState('');
-    const [assigningLoading, setAssigningLoading] = useState(false);
 
-    // Fetch Employees with Smart Sorting
-    useEffect(() => {
-        if (!userProfile) return;
-
-        try {
-            const usersRef = collection(db, "companies", userProfile.companyId, "users");
-            const q = query(usersRef);
-
-            // Real-time listener for status updates
-            const unsubscribe = onSnapshot(q, (snapshot) => {
-                // Filter out all managers (including self)
-                const empList = snapshot.docs.map(doc => doc.data()).filter(u => u.role !== 'manager');
-
-                // Sort employees: 
-                // 1. Green (Available) - priority
-                // 2. Orange (Busy/Progress)
-                // 3. Red (Idle/No Task)
-                const sortedList = empList.sort((a, b) => {
-                    const statusScore = (status) => {
-                        if (status === 'available') return 3; // Green
-                        if (status === 'busy') return 2;      // Orange
-                        return 1;                             // Red (idle/other)
-                    };
-                    return statusScore(b.status) - statusScore(a.status);
-                });
-
-                setEmployees(sortedList);
-                setLoading(false);
-            }, (error) => {
-                console.error("Error fetching employees:", error);
-                setLoading(false);
-            });
-            return () => unsubscribe();
-
-        } catch (error) {
-            console.error("Error setting up listener:", error);
-            // eslint-disable-next-line
-            setLoading(false);
-        }
-    }, [userProfile]);
-
-    // Fetch Tasks for Selected Employee
-    useEffect(() => {
-        if (!selectedEmployee || !userProfile) return;
-
-        const activitiesRef = collection(db, "companies", userProfile.companyId, "users", selectedEmployee.uid, "activities");
-        const q = query(activitiesRef, orderBy("createdAt", "desc"));
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedTasks = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-            setEmployeeTasks(fetchedTasks);
-        });
-
-        return () => unsubscribe();
-    }, [selectedEmployee, userProfile]);
-
-    const verifyTask = async (taskId, status) => {
+    const verifyTask = (taskId, status, points) => {
         if (!selectedEmployee) return;
-        try {
-            const taskRef = doc(db, "companies", userProfile.companyId, "users", selectedEmployee.uid, "activities", taskId);
-
-            // Get task to check amount
-            const taskDoc = await getDoc(taskRef);
-            const taskData = taskDoc.data();
-            const amount = Number(taskData?.taskAmount || 0);
-
-            await updateDoc(taskRef, {
-                status: status,
-                verifiedAt: new Date().toISOString(),
-                verifiedBy: userProfile.uid
-            });
-
-            // Update Salary Stats
-            const userRef = doc(db, "companies", userProfile.companyId, "users", selectedEmployee.uid);
-
-            if (status === 'verified') {
-                await updateDoc(userRef, {
-                    "salaryStats.withdrawn": increment(amount)
-                });
-            } else if (status === 'rejected') {
-                const penalty = amount * 0.15;
-                await updateDoc(userRef, {
-                    "salaryStats.deducted": increment(penalty)
-                });
-            }
-
-        } catch (error) {
-            console.error("Error verifying task:", error);
-            alert("Failed to verify task");
-        }
+        verifyTaskMutation({ employeeId: selectedEmployee.uid, taskId, status, points });
     };
 
     const handleAssignTask = async (e) => {
         e.preventDefault();
+        if (isSubmitting || assigningLoading) return;
+
         if (!selectedEmployee) return;
 
-        // Double Safety Check
         if (selectedEmployee.role === 'manager') {
             alert("Error: You cannot assign tasks to another Manager.");
             return;
         }
 
-        if (!newTaskAmount || isNaN(newTaskAmount)) {
-            alert("Please enter a valid task amount.");
+        if (!newTaskPoints || isNaN(newTaskPoints)) {
+            alert("Please enter a valid points value.");
             return;
         }
 
-        setAssigningLoading(true);
-        try {
-            let attachmentData = null;
-            let finalAttachmentType = null;
+        setIsSubmitting(true);
 
+        let attachmentData = null;
+        let finalAttachmentType = null;
+
+        try {
             if (attachmentType === 'file' && attachmentFile) {
-                if (attachmentFile.size > 700 * 1024) { // 700KB limit
+                if (attachmentFile.size > 700 * 1024) {
                     alert("File too large! Max size is 700KB for free storage.");
-                    setAssigningLoading(false);
+                    setIsSubmitting(false);
                     return;
                 }
 
@@ -157,44 +76,40 @@ export default function ManagerDashboard() {
                 finalAttachmentType = 'link';
             }
 
-            const amount = Number(newTaskAmount);
-
-            const activitiesRef = collection(db, "companies", userProfile.companyId, "users", selectedEmployee.uid, "activities");
-            // Add task
-            await addDoc(activitiesRef, {
-                title: newTaskTitle,
-                description: newTaskDesc,
-                taskAmount: amount, // Salary Amount
-                attachmentUrl: attachmentData || null,
-                attachmentType: finalAttachmentType,
-                status: 'assigned',
-                assignedBy: userProfile.uid,
-                createdAt: new Date().toISOString()
+            assignTask({
+                employeeId: selectedEmployee.uid,
+                taskData: {
+                    title: newTaskTitle,
+                    description: newTaskDesc,
+                    taskAmount: 0, // Legacy field
+                    points: Number(newTaskPoints),
+                    attachmentUrl: attachmentData || null,
+                    attachmentType: finalAttachmentType,
+                }
+            }, {
+                onSuccess: () => {
+                    setNewTaskTitle('');
+                    setNewTaskDesc('');
+                    setNewTaskPoints('');
+                    setAttachmentFile(null);
+                    setAttachmentLink('');
+                    setAttachmentType('file');
+                    setIsSubmitting(false);
+                },
+                onError: () => {
+                    setIsSubmitting(false);
+                }
             });
-
-            // Update User Status to BUSY (Orange) & Increment Allocated
-            const userRef = doc(db, "companies", userProfile.companyId, "users", selectedEmployee.uid);
-            await updateDoc(userRef, {
-                status: 'busy',
-                lastAssignedAt: new Date().toISOString(),
-                "salaryStats.allocated": increment(amount)
-            });
-
-            setNewTaskTitle('');
-            setNewTaskDesc('');
-            setNewTaskAmount('');
-            setAttachmentFile(null);
-            setAttachmentLink('');
-            setAttachmentType('file');
-            alert("Task Assigned Successfully!");
         } catch (error) {
-            console.error("Error assigning task:", error);
-            alert("Failed to assign task");
+            console.error(error);
+            setIsSubmitting(false);
         }
-        setAssigningLoading(false);
     };
 
-    if (loading) return <div className="p-8 text-center">Loading Dashboard...</div>;
+    if (loadingEmployees) return <div className="p-8 text-center">Loading Dashboard...</div>;
+
+    // We may need to find the latest version of the selected employee from the list to get updated stats
+    const currentSelectedEmployee = employees.find(e => e.uid === selectedEmployee?.uid) || selectedEmployee;
 
     return (
         <div className="flex h-screen bg-slate-50 flex-col md:flex-row overflow-hidden">
@@ -239,29 +154,24 @@ export default function ManagerDashboard() {
                                         setSelectedEmployee(emp);
                                         setShowMobileSidebar(false);
                                     }}
-                                    className={`w-full text-left px-6 py-3 hover:bg-slate-700 transition-colors flex items-center justify-between group ${selectedEmployee?.uid === emp.uid ? 'bg-slate-700 border-r-4 border-blue-500' : ''}`}
+                                    className={`w-full text-left px-6 py-3 hover:bg-slate-700 transition-colors flex items-center justify-between group ${selectedEmployee?.uid === emp.uid ? 'bg-slate-700 border-r-4 border-yellow-500' : ''}`}
                                 >
                                     <div className="flex-1 min-w-0 mr-2">
                                         <div className="font-medium text-sm truncate">{emp.name}</div>
-                                        <div className="text-xs text-slate-400 truncate w-full">{emp.email}</div>
-                                        {emp.lastLoginAt && (
-                                            <div className="text-[10px] text-slate-500 mt-0.5 truncate">
-                                                Active: {new Date(emp.lastLoginAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                            </div>
-                                        )}
+                                        <div className="text-xs text-slate-400 truncate w-full flex items-center gap-1">
+                                            <Trophy size={10} className="text-yellow-500" />
+                                            {emp.pointsStats?.totalEarned || 0} pts
+                                        </div>
                                     </div>
 
                                     {/* Status Indicator */}
                                     <div className="flex items-center gap-2 shrink-0">
-                                        {/* Green: Available (Requested Work) */}
                                         {emp.status === 'available' && (
                                             <span className="h-3 w-3 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse" title="Available"></span>
                                         )}
-                                        {/* Orange: Busy (Task in Progress) */}
                                         {emp.status === 'busy' && (
                                             <span className="h-3 w-3 rounded-full bg-orange-500" title="Busy"></span>
                                         )}
-                                        {/* Red: Idle (Default) */}
                                         {(!emp.status || emp.status === 'active' || emp.status === 'idle') && (
                                             <span className="h-3 w-3 rounded-full bg-red-500" title="Idle"></span>
                                         )}
@@ -280,53 +190,30 @@ export default function ManagerDashboard() {
 
             {/* Main Content */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden h-full">
-                {selectedEmployee ? (
+                {currentSelectedEmployee ? (
                     <>
                         <header className="bg-white shadow-sm shrink-0 p-4 md:px-8 border-b border-slate-200">
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div>
                                     <h1 className="text-xl md:text-2xl font-bold text-slate-800 truncate">
-                                        {selectedEmployee.name}
+                                        {currentSelectedEmployee.name}
                                     </h1>
-                                    <p className="text-xs text-slate-500 md:hidden">{selectedEmployee.email}</p>
+                                    <p className="text-xs text-slate-500 md:hidden">{currentSelectedEmployee.email}</p>
                                 </div>
 
                                 <div className="flex flex-wrap items-center gap-4 text-sm w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
-                                    {/* Base Salary Edit */}
-                                    <div className="group relative flex flex-col items-start md:items-end cursor-pointer shrink-0"
-                                        onClick={async () => {
-                                            const newBase = prompt("Set Base Salary for Next Month:", selectedEmployee.salaryStats?.baseSalary || 40000);
-                                            if (newBase && !isNaN(newBase)) {
-                                                try {
-                                                    const userRef = doc(db, "companies", userProfile.companyId, "users", selectedEmployee.uid);
-                                                    await updateDoc(userRef, { "salaryStats.baseSalary": Number(newBase) });
-                                                } catch (e) { console.error(e); alert("Failed to update base salary"); }
-                                            }
-                                        }}
-                                    >
-                                        <span className="text-slate-400 text-[10px] uppercase tracking-wider font-semibold group-hover:text-blue-500 flex items-center gap-1">
-                                            Base <span className="hidden leading-none md:inline">Salary</span> ✎
+                                    <div className="flex flex-col items-start md:items-end shrink-0">
+                                        <span className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold">Total Earned</span>
+                                        <span className="font-bold text-xl text-yellow-600 flex items-center gap-1">
+                                            <Trophy size={18} /> {currentSelectedEmployee.pointsStats?.totalEarned || 0}
                                         </span>
-                                        <span className="font-medium text-slate-600">₹{selectedEmployee.salaryStats?.baseSalary || 40000}</span>
                                     </div>
 
-                                    {/* Stats */}
                                     <div className="h-8 w-px bg-slate-200 hidden md:block"></div>
 
                                     <div className="flex flex-col items-start md:items-end shrink-0">
-                                        <span className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold">Payout</span>
-                                        <span className="font-bold text-lg text-slate-800">
-                                            ₹{(selectedEmployee.salaryStats?.baseSalary || 40000) - (selectedEmployee.salaryStats?.withdrawn || 0) - (selectedEmployee.salaryStats?.deducted || 0)}
-                                        </span>
-                                    </div>
-
-                                    <div className="flex flex-col items-start md:items-end shrink-0">
-                                        <span className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold">Withdrawn</span>
-                                        <span className="font-bold text-green-600">₹{selectedEmployee.salaryStats?.withdrawn || 0}</span>
-                                    </div>
-                                    <div className="flex flex-col items-start md:items-end shrink-0">
-                                        <span className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold">Deducted</span>
-                                        <span className="font-bold text-red-500">₹{selectedEmployee.salaryStats?.deducted || 0}</span>
+                                        <span className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold">Current Balance</span>
+                                        <span className="font-bold text-slate-700">{currentSelectedEmployee.pointsStats?.currentBalance || 0} pts</span>
                                     </div>
                                 </div>
                             </div>
@@ -355,8 +242,8 @@ export default function ManagerDashboard() {
                                                         <div className="flex-1 min-w-0">
                                                             <div className="flex items-start justify-between">
                                                                 <h4 className="font-bold text-slate-800 break-words pr-2">{task.title}</h4>
-                                                                <span className="bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded text-xs shrink-0 whitespace-nowrap">
-                                                                    ₹{task.taskAmount || 0}
+                                                                <span className="bg-yellow-100 text-yellow-800 font-bold px-2 py-0.5 rounded text-xs shrink-0 whitespace-nowrap flex items-center gap-1">
+                                                                    <Star size={10} fill="currentColor" /> {task.points || 0} PTS
                                                                 </span>
                                                             </div>
                                                             <p className="text-sm text-slate-600 mt-1 break-words">{task.description}</p>
@@ -396,13 +283,13 @@ export default function ManagerDashboard() {
                                                         {task.status === 'verification_pending' && (
                                                             <div className="flex md:flex-col gap-2 shrink-0 mt-2 md:mt-0 w-full md:w-auto">
                                                                 <button
-                                                                    onClick={() => verifyTask(task.id, 'verified')}
+                                                                    onClick={() => verifyTask(task.id, 'verified', task.points || 0)}
                                                                     className="flex-1 md:flex-none px-4 py-2 bg-green-600 text-white text-xs rounded hover:bg-green-700 font-medium shadow-sm active:scale-95 transition-all text-center"
                                                                 >
                                                                     Approve
                                                                 </button>
                                                                 <button
-                                                                    onClick={() => verifyTask(task.id, 'rejected')}
+                                                                    onClick={() => verifyTask(task.id, 'rejected', task.points || 0)}
                                                                     className="flex-1 md:flex-none px-4 py-2 bg-red-600 text-white text-xs rounded hover:bg-red-700 font-medium shadow-sm active:scale-95 transition-all text-center"
                                                                 >
                                                                     Reject
@@ -432,11 +319,44 @@ export default function ManagerDashboard() {
                                     )}
                                 </div>
 
-                                {/* Assign Task Form (Right col) */}
-                                <div className="lg:col-span-1 order-1 lg:order-2">
+                                {/* Right Column: Leaderboard & Assign Task */}
+                                <div className="lg:col-span-1 order-1 lg:order-2 space-y-6">
+
+                                    {/* Leaderboard Widget */}
+                                    <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-lg shadow-lg p-5 text-white">
+                                        <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                                            <Award size={20} className="text-yellow-300" /> Top Performers
+                                        </h3>
+                                        <div className="space-y-3">
+                                            {leaderboard.length === 0 ? (
+                                                <p className="text-indigo-200 text-sm italic">No data yet.</p>
+                                            ) : (
+                                                leaderboard.map((user, index) => (
+                                                    <div key={user.uid} className="flex items-center gap-3 bg-white/10 p-2 rounded-lg border border-white/10">
+                                                        <div className={`
+                                                            w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0
+                                                            ${index === 0 ? 'bg-yellow-400 text-yellow-900 shadow-yellow-500/50' :
+                                                                index === 1 ? 'bg-slate-300 text-slate-800' :
+                                                                    'bg-amber-600 text-amber-100'}
+                                                            shadow-sm
+                                                        `}>
+                                                            #{index + 1}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="font-semibold text-sm truncate">{user.name}</div>
+                                                            <div className="text-indigo-200 text-xs truncate">{user.pointsStats?.totalEarned || 0} pts</div>
+                                                        </div>
+                                                        {index === 0 && <Zap size={16} className="text-yellow-300 animate-pulse" />}
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Assign Task Form */}
                                     <div className="bg-white rounded-lg shadow-md p-5 border border-slate-200 sticky top-4">
                                         <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                                            <div className="p-1.5 bg-blue-100 rounded-md text-blue-600"><DollarSign size={18} /></div>
+                                            <div className="p-1.5 bg-blue-100 rounded-md text-blue-600"><Star size={18} /></div>
                                             Assign New Task
                                         </h3>
                                         <form onSubmit={handleAssignTask} className="space-y-4">
@@ -446,21 +366,21 @@ export default function ManagerDashboard() {
                                                     type="text"
                                                     required
                                                     className="w-full px-3 py-2 border border-slate-300 rounded focus:ring-blue-500 focus:border-blue-500"
-                                                    placeholder="e.g. Prepare Monthly Report"
+                                                    placeholder="e.g. Weekly Challenge"
                                                     value={newTaskTitle}
                                                     onChange={(e) => setNewTaskTitle(e.target.value)}
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Amount (₹)</label>
+                                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Points Reward</label>
                                                 <input
                                                     type="number"
                                                     required
                                                     min="0"
                                                     className="w-full px-3 py-2 border border-slate-300 rounded focus:ring-blue-500 focus:border-blue-500 font-mono"
-                                                    placeholder="0.00"
-                                                    value={newTaskAmount}
-                                                    onChange={(e) => setNewTaskAmount(e.target.value)}
+                                                    placeholder="100"
+                                                    value={newTaskPoints}
+                                                    onChange={(e) => setNewTaskPoints(e.target.value)}
                                                 />
                                             </div>
                                             <div>
@@ -524,7 +444,7 @@ export default function ManagerDashboard() {
                                                 disabled={assigningLoading}
                                                 className="w-full bg-blue-600 text-white py-3 px-4 rounded hover:bg-blue-700 font-bold tracking-wide disabled:opacity-50 transition-colors shadow-sm active:scale-95"
                                             >
-                                                {assigningLoading ? 'Assigning...' : 'Assign Task'}
+                                                {assigningLoading ? 'Assigning...' : 'Assign Challenge'}
                                             </button>
                                         </form>
                                     </div>

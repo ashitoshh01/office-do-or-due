@@ -1,49 +1,36 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { db } from '../firebase';
 import Layout from '../components/Layout';
 import UploadModal from '../components/UploadModal';
-import { doc, updateDoc } from 'firebase/firestore';
-import { Check, Clock, AlertCircle, Briefcase, Hand } from 'lucide-react';
-import { useTasks } from '../hooks/useTasks';
-import { useFileUpload } from '../hooks/useFileUpload';
-import toast from 'react-hot-toast';
+import { Check, Clock, AlertCircle, Briefcase, Hand, Trophy, Star } from 'lucide-react';
+import { useTasks, useUpdateUserStatus, useUploadProof } from '../hooks/useReactQueryTasks';
 
 export default function EmployeeDashboard() {
     const { userProfile } = useAuth();
-    const { tasks, loading } = useTasks(userProfile);
-    const { uploadProof, uploading } = useFileUpload(userProfile);
+
+    // React Query Hooks
+    const { data: tasks = [], isLoading: loading } = useTasks(userProfile);
+    const { mutate: updateUserStatus, isLoading: updatingStatus } = useUpdateUserStatus(userProfile);
+    const { mutate: uploadProof, isLoading: uploading } = useUploadProof(userProfile);
 
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [activeTaskId, setActiveTaskId] = useState(null);
-    const [updatingStatus, setUpdatingStatus] = useState(false);
 
     const isRequestingTask = userProfile?.status === 'requesting_task';
 
-    const toggleRequestWork = async () => {
+    const toggleRequestWork = () => {
         const newStatus = isRequestingTask ? 'active' : 'requesting_task';
-        setUpdatingStatus(true);
-
-        try {
-            const userRef = doc(db, "companies", userProfile.companyId, "users", userProfile.uid);
-            await updateDoc(userRef, { status: newStatus });
-            toast.success(newStatus === 'requesting_task' ? "Work requested successfully!" : "Request cancelled.");
-        } catch (error) {
-            console.error("Error updating status:", error);
-            toast.error("Failed to update status");
-        } finally {
-            setUpdatingStatus(false);
-        }
+        updateUserStatus({ newStatus });
     };
 
-    const handleUploadProof = async (uploadPayload) => {
+    const handleUploadProof = (uploadPayload) => {
         if (!activeTaskId) return;
-
-        const success = await uploadProof(activeTaskId, uploadPayload);
-        if (success) {
-            setShowUploadModal(false);
-            setActiveTaskId(null);
-        }
+        uploadProof({ taskId: activeTaskId, uploadPayload }, {
+            onSuccess: () => {
+                setShowUploadModal(false);
+                setActiveTaskId(null);
+            }
+        });
     };
 
     const getStatusBadge = (status) => {
@@ -61,28 +48,21 @@ export default function EmployeeDashboard() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                     <div>
                         <h1 className="text-2xl font-bold text-slate-900">My Activities</h1>
-                        <p className="text-sm text-slate-500">Complete tasks assigned by your manager</p>
+                        <p className="text-sm text-slate-500">Complete challenges to earn points</p>
                     </div>
 
                     <div className="flex flex-col md:flex-row items-start md:items-center gap-4 w-full md:w-auto">
-                        {userProfile?.salaryStats && (
-                            <div className="flex items-center gap-4 text-sm bg-white p-3 rounded-lg border border-slate-200 shadow-sm w-full md:w-auto justify-between md:justify-start">
-                                <div className="flex flex-col items-end px-2 border-r border-slate-100 flex-1 md:flex-none">
-                                    <span className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold">Next Payout</span>
-                                    <span className="font-bold text-lg text-slate-800">
-                                        ₹{(userProfile.salaryStats.baseSalary || 40000) - (userProfile.salaryStats.withdrawn || 0) - (userProfile.salaryStats.deducted || 0)}
-                                    </span>
-                                </div>
-                                <div className="flex flex-col items-end px-2 border-r border-slate-100 flex-1 md:flex-none">
-                                    <span className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold">Withdrawn</span>
-                                    <span className="font-bold text-green-600">₹{userProfile.salaryStats.withdrawn || 0}</span>
-                                </div>
-                                <div className="flex flex-col items-end px-2 flex-1 md:flex-none">
-                                    <span className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold">Deducted</span>
-                                    <span className="font-bold text-red-500">₹{userProfile.salaryStats.deducted || 0}</span>
-                                </div>
+                        <div className="flex items-center gap-3 bg-white p-3 rounded-lg border border-yellow-200 shadow-sm w-full md:w-auto justify-between md:justify-start ring-1 ring-yellow-100">
+                            <div className="p-2 bg-yellow-100 rounded-full text-yellow-600">
+                                <Trophy size={20} />
                             </div>
-                        )}
+                            <div className="flex flex-col items-end px-2">
+                                <span className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold">Total Earned</span>
+                                <span className="font-bold text-lg text-slate-800 flex items-center gap-1">
+                                    {userProfile?.pointsStats?.totalEarned || 0} <span className="text-yellow-600 text-xs">PTS</span>
+                                </span>
+                            </div>
+                        </div>
 
                         <button
                             onClick={toggleRequestWork}
@@ -132,7 +112,7 @@ export default function EmployeeDashboard() {
                         <div className="p-16 text-center text-slate-500 flex flex-col items-center">
                             <Briefcase size={48} className="text-slate-300 mb-4" />
                             <h3 className="text-lg font-medium text-slate-900">No tasks assigned yet</h3>
-                            <p className="mt-1 max-w-sm mx-auto">Your task list is empty. Click "Request Work" to let your manager know you are available.</p>
+                            <p className="mt-1 max-w-sm mx-auto">Your list is empty. Click "Request Work" to get new challenges.</p>
                         </div>
                     ) : (
                         <ul className="divide-y divide-slate-100">
@@ -142,8 +122,8 @@ export default function EmployeeDashboard() {
                                         <div className="flex items-center justify-between mb-1">
                                             <div className="flex items-center gap-2">
                                                 <h3 className={`font-medium text-slate-900 ${task.status === 'verified' ? 'line-through text-slate-400' : ''}`}>{task.title}</h3>
-                                                <span className="bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded text-[10px]">
-                                                    ₹{task.taskAmount || 0}
+                                                <span className="bg-yellow-100 text-yellow-800 font-bold px-2 py-0.5 rounded text-[10px] flex items-center gap-1">
+                                                    <Star size={10} fill="currentColor" /> {task.points || 0} PTS
                                                 </span>
                                             </div>
                                             {getStatusBadge(task.status)}
