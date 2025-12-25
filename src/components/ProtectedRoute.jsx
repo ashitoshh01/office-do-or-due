@@ -3,23 +3,40 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import SkeletonLayout from './SkeletonLayout';
 
-export default function ProtectedRoute({ children, allowedRoles }) {
+export default function ProtectedRoute({ children, allowedRoles, requireSuperAdmin = false }) {
     const { currentUser, userProfile, loading } = useAuth();
 
     if (loading) {
         return <SkeletonLayout />;
     }
 
-    if (!currentUser) {
-        return <Navigate to="/login" />;
+    if (!currentUser || !userProfile) {
+        return <Navigate to="/primecommerce/login" />;
+    }
+
+    const companySlug = userProfile.companyId || 'primecommerce';
+
+    // Check super admin requirement
+    if (requireSuperAdmin && !userProfile.isSuperAdmin) {
+        return <Navigate to="/" />;
     }
 
     // If roles are specified, check if user has permission
-    if (allowedRoles && userProfile && !allowedRoles.includes(userProfile.role)) {
-        // Redirect to their appropriate dashboard if they try to access wrong area
-        if (userProfile.role === 'manager') return <Navigate to="/manager-dashboard" />;
-        if (userProfile.role === 'employee') return <Navigate to="/user-dashboard" />;
-        return <Navigate to="/" />; // Fallback
+    if (allowedRoles && !allowedRoles.includes(userProfile.role)) {
+        // Redirect to their appropriate dashboard
+        if (userProfile.isSuperAdmin) {
+            return <Navigate to="/superadmin/dashboard" />;
+        }
+        if (userProfile.role === 'admin') {
+            return <Navigate to={`/${companySlug}/admin/dashboard`} />;
+        }
+        if (userProfile.role === 'manager') {
+            return <Navigate to={`/${companySlug}/manager/dashboard`} />;
+        }
+        if (userProfile.role === 'employee') {
+            return <Navigate to={`/${companySlug}/dashboard`} />;
+        }
+        return <Navigate to="/" />;
     }
 
     return children;
