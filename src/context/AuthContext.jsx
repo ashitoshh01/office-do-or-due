@@ -100,7 +100,6 @@ export function AuthProvider({ children }) {
         return userCredential;
     }
 
-<<<<<<< HEAD
     // NEW: Link Existing User to Company
     async function joinCompany(email, password, accessCode, expectedCompanyId = null) {
         // 1. Verify credentials by signing in
@@ -121,15 +120,6 @@ export function AuthProvider({ children }) {
         return userCredential;
     }
 
-    // Login function
-    function login(email, password) {
-        return signInWithEmailAndPassword(auth, email, password);
-    }
-
-
-
-
-=======
     // Login function with company and role validation
     async function login(email, password, companySlug, expectedRole = null) {
         // First authenticate with Firebase
@@ -152,14 +142,15 @@ export function AuthProvider({ children }) {
 
         const userData = querySnapshot.docs[0].data();
 
-        // Validate company
-        if (userData.companyId !== companySlug) {
+        // Validate company (only if strict validation is requested)
+        if (companySlug && userData.companyId !== companySlug) {
             await signOut(auth);
             throw new Error("Invalid company credentials");
         }
 
         // Check if user is active
-        if (userData.status !== 'active' && userData.status !== 'admin') {
+        // We use a deny-list approach to allow various work statuses (e.g. 'requesting_task', 'busy')
+        if (userData.status === 'inactive' || userData.status === 'banned') {
             await signOut(auth);
             throw new Error("Your account is not active. Please contact your administrator.");
         }
@@ -172,7 +163,6 @@ export function AuthProvider({ children }) {
 
         return userCredential;
     }
->>>>>>> 0416bddd4c1124f7733b794279b8b41e74f5ad53
 
     // Logout function
     function logout() {
@@ -230,10 +220,7 @@ export function AuthProvider({ children }) {
         currentUser,
         userProfile,
         login,
-<<<<<<< HEAD
-
-=======
->>>>>>> 0416bddd4c1124f7733b794279b8b41e74f5ad53
+        joinCompany,
         logout,
         loading
     };

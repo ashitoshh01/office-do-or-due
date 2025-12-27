@@ -1,7 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { collection, query, getDocs, doc, updateDoc, addDoc, orderBy, increment, limit } from 'firebase/firestore';
+import { collection, query, getDocs, doc, updateDoc, addDoc, orderBy, increment, limit, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import toast from 'react-hot-toast';
+import { useState, useEffect } from 'react';
 
 // --- Helpers ---
 const convertToBase64 = (file) => {
@@ -42,15 +43,26 @@ export function useEmployees(userProfile) {
 
             // Sorting Logic
             return empList.sort((a, b) => {
+                // Priority 1: Requesting Task (Active Status)
+                if (a.status === 'requesting_task' && b.status !== 'requesting_task') return -1;
+                if (b.status === 'requesting_task' && a.status !== 'requesting_task') return 1;
+
+                // Priority 2: Pending Verifications (Red Dot logic)
+                const pendingA = a.pendingTaskCount || 0;
+                const pendingB = b.pendingTaskCount || 0;
+                if (pendingA !== pendingB) return pendingB - pendingA;
+
+                // Priority 3: Status Score
                 const statusScore = (status) => {
-                    if (status === 'available') return 3; // Green
-                    if (status === 'busy') return 2;      // Orange
-                    return 1;                             // Red (idle/other)
+                    if (status === 'available') return 3;
+                    if (status === 'busy') return 2;
+                    return 1;
                 };
                 return statusScore(b.status) - statusScore(a.status);
             });
         },
         enabled: !!userProfile?.companyId,
+        refetchInterval: 10000, // Poll every 10s for status updates/notifications
     });
 }
 
@@ -107,6 +119,7 @@ export function useUpdateUserStatus(userProfile) {
         },
         onSuccess: (newStatus) => {
             toast.success(newStatus === 'requesting_task' ? "Work requested successfully!" : "Request cancelled.");
+            queryClient.invalidateQueries(['employees', userProfile.companyId]);
         },
         onError: (error) => {
             console.error(error);
@@ -125,18 +138,25 @@ export function useUploadProof(userProfile) {
             let proofData = null;
 
             if (type === 'file') {
-                if (data.size > 700 * 1024) throw new Error("File too large! Max 700KB.");
+                if (data.size > 2000 * 1024) throw new Error("File too large! Max 2MB.");
                 proofData = await convertToBase64(data);
             } else {
                 proofData = data;
             }
 
+            // 1. Update Task
             const taskRef = doc(db, "companies", userProfile.companyId, "users", userProfile.uid, "activities", taskId);
             await updateDoc(taskRef, {
                 status: 'verification_pending',
                 proofUrl: proofData,
                 proofType: type,
                 completedAt: new Date().toISOString()
+            });
+
+            // 2. Increment Pending Task Count for Manager Notification
+            const userRef = doc(db, "companies", userProfile.companyId, "users", userProfile.uid);
+            await updateDoc(userRef, {
+                pendingTaskCount: increment(1)
             });
         },
         onSuccess: (_, variables) => {
@@ -161,6 +181,7 @@ export function useAssignTask(userProfile) {
             await addDoc(activitiesRef, {
                 ...taskData,
                 points: taskData.points, // Points instead of Amount
+                deadline: taskData.deadline || null, // NEW: Deadline
                 status: 'assigned',
                 assignedBy: userProfile.uid,
                 createdAt: new Date().toISOString()
@@ -200,14 +221,20 @@ export function useVerifyTask(userProfile) {
             });
 
             const userRef = doc(db, "companies", userProfile.companyId, "users", employeeId);
+
+            // Updates to User Profile
+            const updates = {
+                // Decrement pending count since it's verified (or rejected)
+                pendingTaskCount: increment(-1)
+            };
+
             // Points Logic
             if (status === 'verified') {
-                await updateDoc(userRef, {
-                    "pointsStats.totalEarned": increment(points),
-                    "pointsStats.currentBalance": increment(points) // Optional if we want a spendable balance later
-                });
+                updates["pointsStats.totalEarned"] = increment(points);
+                updates["pointsStats.currentBalance"] = increment(points);
             }
-            // No penalty for rejection in points system yet
+
+            await updateDoc(userRef, updates);
         },
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries(['tasks', variables.employeeId]);
@@ -220,4 +247,67 @@ export function useVerifyTask(userProfile) {
             toast.error("Failed to verify task");
         }
     });
+}
+
+// 8. Chat Hook
+export function useChat(companyId, employeeId) {
+    const [messages, setMessages] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        // Strict validation to prevent Firestore crashes
+        if (!companyId || typeof companyId !== 'string' || !employeeId || typeof employeeId !== 'string') {
+            setMessages([]);
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
+
+        let unsubscribe;
+        try {
+            const messagesRef = collection(db, "companies", companyId, "conversations", employeeId, "messages");
+            const q = query(messagesRef, orderBy("createdAt", "asc"));
+
+            unsubscribe = onSnapshot(q,
+                (snapshot) => {
+                    const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setMessages(msgs);
+                    setLoading(false);
+                },
+                (error) => {
+                    console.error("Chat Error:", error);
+                    // toast.error("Chat connection failed"); // Optional: Don't spam toasts
+                    setLoading(false);
+                }
+            );
+        } catch (err) {
+            console.error("Error setting up chat listener:", err);
+            setLoading(false);
+        }
+
+        return () => {
+            if (unsubscribe) {
+                unsubscribe();
+            }
+        };
+    }, [companyId, employeeId]);
+
+    const sendMessage = async (text, senderId) => {
+        if (!text.trim() || !companyId || !employeeId) return;
+        try {
+            const messagesRef = collection(db, "companies", companyId, "conversations", employeeId, "messages");
+            await addDoc(messagesRef, {
+                text,
+                senderId,
+                createdAt: new Date().toISOString(),
+                read: false
+            });
+        } catch (error) {
+            console.error("Error sending message:", error);
+            toast.error("Failed to send message");
+        }
+    };
+
+    return { messages, loading, sendMessage };
 }

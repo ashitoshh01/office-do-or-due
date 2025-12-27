@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 const SidebarContent = ({ appTitle, role, navigate, location, userProfile, handleLogout, setIsMobileMenuOpen }) => {
+    const companyId = userProfile?.companyId || 'primecommerce';
+
     const navItemStyle = (path) => ({
         display: 'flex',
         alignItems: 'center',
@@ -29,13 +31,28 @@ const SidebarContent = ({ appTitle, role, navigate, location, userProfile, handl
 
             <nav className="flex-1 p-4">
                 {role === 'employee' && (
-                    <div onClick={() => { navigate('/user-dashboard'); setIsMobileMenuOpen(false); }} style={navItemStyle('/user-dashboard')}>
+                    <div
+                        onClick={() => { navigate(`/${companyId}/dashboard`); setIsMobileMenuOpen(false); }}
+                        style={navItemStyle(`/${companyId}/dashboard`)}
+                    >
                         <LayoutDashboard size={20} /> Dashboard
+                    </div>
+                )}
+                {/* Leaderboard Link for Employees */}
+                {role === 'employee' && (
+                    <div
+                        onClick={() => { navigate(`/${companyId}/leaderboard`); setIsMobileMenuOpen(false); }}
+                        style={navItemStyle(`/${companyId}/leaderboard`)}
+                    >
+                        <LayoutDashboard size={20} /> Leaderboard
                     </div>
                 )}
 
                 {role === 'manager' && (
-                    <div onClick={() => { navigate('/manager-dashboard'); setIsMobileMenuOpen(false); }} style={navItemStyle('/manager-dashboard')}>
+                    <div
+                        onClick={() => { navigate(`/${companyId}/manager/dashboard`); setIsMobileMenuOpen(false); }}
+                        style={navItemStyle(`/${companyId}/manager/dashboard`)}
+                    >
                         <LayoutDashboard size={20} /> Team Overview
                     </div>
                 )}
@@ -75,7 +92,7 @@ const Layout = ({ children }) => {
     const handleLogout = async () => {
         try {
             await logout();
-            navigate('/login');
+            navigate('/select-company'); // Better UX: go to company selection
         } catch (error) {
             console.error("Failed to log out", error);
         }

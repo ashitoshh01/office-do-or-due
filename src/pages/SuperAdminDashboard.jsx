@@ -1,27 +1,47 @@
 import React, { useState, useEffect } from 'react';
-<<<<<<< HEAD
-import { db } from '../firebase';
+import { useNavigate } from 'react-router-dom';
+import { db, auth } from '../firebase';
 import { collection, getDocs, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { useAuth } from '../context/AuthContext';
-import { Building2, Key, Users, Activity, Trash2, Plus, Copy, Check } from 'lucide-react';
+import { Building2, Key, Users, Activity, Trash2, Plus, Copy, Check, UserPlus, LogOut } from 'lucide-react';
 import { CompanyService } from '../services/CompanyService';
+import JoinRequestService from '../services/JoinRequestService';
 
 export default function SuperAdminDashboard() {
-    const { userProfile } = useAuth();
-    const [companies, setCompanies] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [creating, setCreating] = useState(false);
+    const { userProfile, logout } = useAuth();
+    const navigate = useNavigate();
 
-    // Form State
+    // Companies State
+    const [companies, setCompanies] = useState([]);
+    const [companiesLoading, setCompaniesLoading] = useState(true);
+    const [creating, setCreating] = useState(false);
     const [newCompanyName, setNewCompanyName] = useState('');
     const [statusMsg, setStatusMsg] = useState('');
 
-    useEffect(() => {
-        fetchCompanies();
-    }, []);
+    // Requests State
+    const [requests, setRequests] = useState([]);
+    const [requestsLoading, setRequestsLoading] = useState(true);
+    const [processing, setProcessing] = useState(null);
 
+    // Auth Protection
+    useEffect(() => {
+        if (userProfile && !userProfile.isSuperAdmin) {
+            navigate('/');
+        }
+    }, [userProfile, navigate]);
+
+    useEffect(() => {
+        // Only fetch if authenticated as super admin
+        if (userProfile?.isSuperAdmin) {
+            fetchCompanies();
+            loadRequests();
+        }
+    }, [userProfile]);
+
+    // --- Companies Logic ---
     const fetchCompanies = async () => {
-        setLoading(true);
+        setCompaniesLoading(true);
         try {
             const querySnapshot = await getDocs(collection(db, "companies"));
             const companiesData = querySnapshot.docs.map(doc => ({
@@ -33,11 +53,9 @@ export default function SuperAdminDashboard() {
             console.error("Error fetching companies:", error);
             setStatusMsg('Error fetching companies.');
         } finally {
-            setLoading(false);
+            setCompaniesLoading(false);
         }
     };
-
-
 
     const handleCreateCompany = async (e) => {
         e.preventDefault();
@@ -48,8 +66,6 @@ export default function SuperAdminDashboard() {
 
         try {
             const newCompany = await CompanyService.createCompany(newCompanyName);
-
-            // Update UI
             setCompanies([...companies, newCompany]);
             setNewCompanyName('');
             setStatusMsg(`Success! Created ${newCompany.name}`);
@@ -74,7 +90,93 @@ export default function SuperAdminDashboard() {
         }
     };
 
-    // Component helper for copying text
+    // --- Join Requests Logic ---
+    async function loadRequests() {
+        try {
+            setRequestsLoading(true);
+            const pendingRequests = await JoinRequestService.getPendingRequestsForApprover('superadmin@primecommerce.com');
+            const adminRequests = pendingRequests.filter(req => req.roleRequested === 'ADMIN');
+            setRequests(adminRequests);
+        } catch (error) {
+            console.error('Error loading requests:', error);
+        } finally {
+            setRequestsLoading(false);
+        }
+    }
+
+    async function handleApprove(request) {
+        try {
+            setProcessing(request.id);
+            let userId = request.uid;
+
+            // Legacy support for requests without UID
+            if (!userId) {
+                try {
+                    const tempPassword = generateRandomPassword();
+                    const userCredential = await createUserWithEmailAndPassword(auth, request.email, tempPassword);
+                    userId = userCredential.user.uid;
+                    await sendPasswordResetEmail(auth, request.email);
+                    alert(`Legacy request approved! Password reset sent to ${request.email}`);
+                } catch (err) {
+                    if (err.code === 'auth/email-already-in-use') {
+                        throw new Error("User email already exists but request has no UID. Please reject and ask user to sign up again.");
+                    }
+                    throw err;
+                }
+            }
+
+            // Create Company/User Profile
+            // Assuming 'primecommerce' as the default parent company for superadmins/admins in this context?
+            // The Original Code hardcoded 'primecommerce'. We'll stick to that strictly to avoid breaking logic.
+            const userRef = doc(db, 'companies', 'primecommerce', 'users', userId);
+            const userData = {
+                uid: userId,
+                name: request.name,
+                email: request.email,
+                role: 'admin',
+                companyId: 'primecommerce',
+                companyName: 'Prime Commerce',
+                status: 'admin',
+                isActive: true,
+                createdAt: new Date().toISOString()
+            };
+
+            await setDoc(userRef, userData);
+            await JoinRequestService.updateRequestStatus(request.id, 'APPROVED');
+
+            if (request.uid) {
+                // alert('Admin approved successfully!'); // Optional: keep UI clean, maybe use statusMsg instead
+                setStatusMsg(`Approved ${request.email}`);
+            }
+
+            loadRequests();
+        } catch (error) {
+            console.error('Error approving request:', error);
+            alert('Error approving request: ' + error.message);
+        } finally {
+            setProcessing(null);
+        }
+    }
+
+    async function handleReject(request) {
+        try {
+            setProcessing(request.id);
+            await JoinRequestService.updateRequestStatus(request.id, 'REJECTED');
+            loadRequests();
+            setStatusMsg(`Rejected ${request.email}`);
+        } catch (error) {
+            console.error('Error rejecting request:', error);
+            alert('Error rejecting request: ' + error.message);
+        } finally {
+            setProcessing(null);
+        }
+    }
+
+    function generateRandomPassword() {
+        return Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-10);
+    }
+
+    // --- UI Helpers ---
     const CopyButton = ({ text }) => {
         const [copied, setCopied] = useState(false);
         const handleCopy = () => {
@@ -108,8 +210,17 @@ export default function SuperAdminDashboard() {
                             <p className="text-xs text-slate-400 font-mono">SAAS CONTROL CENTER</p>
                         </div>
                     </div>
-                    <div className="text-sm text-slate-400">
-                        {userProfile?.email}
+                    <div className="flex items-center gap-4">
+                        <div className="text-sm text-slate-400">
+                            {userProfile?.email}
+                        </div>
+                        <button
+                            onClick={logout}
+                            className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+                            title="Logout"
+                        >
+                            <LogOut size={20} />
+                        </button>
                     </div>
                 </div>
             </header>
@@ -124,9 +235,78 @@ export default function SuperAdminDashboard() {
                             <Building2 size={24} className="text-indigo-400" /> {companies.length}
                         </div>
                     </div>
+                    <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-sm">
+                        <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Pending Requests</h3>
+                        <div className="text-3xl font-bold text-white flex items-center gap-2">
+                            <UserPlus size={24} className="text-orange-400" /> {requests.length}
+                        </div>
+                    </div>
                 </div>
 
-                {/* Create Company Section */}
+                {/* Status Message */}
+                {statusMsg && (
+                    <div className={`mb-8 p-3 rounded text-sm font-medium ${statusMsg.toLowerCase().includes('error') ? 'bg-red-900/30 text-red-300 border border-red-800' : 'bg-green-900/30 text-green-300 border border-green-800'}`}>
+                        {statusMsg}
+                    </div>
+                )}
+
+                {/* Join Requests Section */}
+                <div className="bg-slate-800 rounded-xl border border-slate-700 shadow-sm overflow-hidden mb-8">
+                    <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
+                        <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                            <UserPlus size={20} className="text-orange-400" /> Join Requests
+                        </h2>
+                    </div>
+                    {requestsLoading ? (
+                        <div className="p-8 text-center text-slate-500 animate-pulse">Loading requests...</div>
+                    ) : requests.length === 0 ? (
+                        <div className="p-12 text-center text-slate-500">No pending requests.</div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-slate-900/50 border-b border-slate-700 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                                        <th className="px-6 py-4">Name</th>
+                                        <th className="px-6 py-4">Email</th>
+                                        <th className="px-6 py-4">Requested On</th>
+                                        <th className="px-6 py-4 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-700">
+                                    {requests.map(request => (
+                                        <tr key={request.id} className="hover:bg-slate-700/50 transition-colors">
+                                            <td className="px-6 py-4 font-medium text-white">{request.name}</td>
+                                            <td className="px-6 py-4 text-slate-300">{request.email}</td>
+                                            <td className="px-6 py-4 text-slate-400 text-sm">
+                                                {new Date(request.createdAt).toLocaleDateString()}
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <div className="flex justify-end gap-2">
+                                                    <button
+                                                        onClick={() => handleApprove(request)}
+                                                        disabled={processing === request.id}
+                                                        className="px-3 py-1.5 bg-green-600/20 hover:bg-green-600/40 text-green-400 hover:text-green-300 border border-green-600/50 rounded text-xs font-semibold transition-all disabled:opacity-50"
+                                                    >
+                                                        Approve
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleReject(request)}
+                                                        disabled={processing === request.id}
+                                                        className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 hover:text-red-300 border border-red-600/50 rounded text-xs font-semibold transition-all disabled:opacity-50"
+                                                    >
+                                                        Reject
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+
+                {/* Provision Company Section */}
                 <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-sm mb-8">
                     <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                         <Plus size={20} className="text-green-400" /> Provision New Company
@@ -151,22 +331,17 @@ export default function SuperAdminDashboard() {
                             {creating ? 'Provisioning...' : 'Create Tenant'}
                         </button>
                     </form>
-                    {statusMsg && (
-                        <div className={`mt-4 p-3 rounded text-sm font-medium ${statusMsg.startsWith('Error') ? 'bg-red-900/30 text-red-300 border border-red-800' : 'bg-green-900/30 text-green-300 border border-green-800'}`}>
-                            {statusMsg}
-                        </div>
-                    )}
                 </div>
 
                 {/* Companies List */}
                 <div className="bg-slate-800 rounded-xl border border-slate-700 shadow-sm overflow-hidden">
-                    <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                    <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
                         <h2 className="text-lg font-bold text-white flex items-center gap-2">
                             <Building2 size={20} className="text-slate-400" /> Active Tenants
                         </h2>
                     </div>
 
-                    {loading ? (
+                    {companiesLoading ? (
                         <div className="p-8 text-center text-slate-500 animate-pulse">Loading tenants data...</div>
                     ) : companies.length === 0 ? (
                         <div className="p-12 text-center text-slate-500">No companies found. Create one above.</div>
@@ -228,219 +403,7 @@ export default function SuperAdminDashboard() {
                         </div>
                     )}
                 </div>
-=======
-import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import JoinRequestService from '../services/JoinRequestService';
-import { auth, db } from '../firebase';
-import { createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
 
-export default function SuperAdminDashboard() {
-    const { userProfile, logout } = useAuth();
-    const navigate = useNavigate();
-    const [requests, setRequests] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [processing, setProcessing] = useState(null);
-
-    // Ensure only super admin can access
-    useEffect(() => {
-        if (!userProfile?.isSuperAdmin) {
-            navigate('/');
-        }
-    }, [userProfile, navigate]);
-
-    // Fetch admin join requests
-    useEffect(() => {
-        loadRequests();
-    }, []);
-
-    async function loadRequests() {
-        try {
-            setLoading(true);
-            const pendingRequests = await JoinRequestService.getPendingRequestsForApprover('superadmin@primecommerce.com');
-            // Filter only ADMIN role requests
-            const adminRequests = pendingRequests.filter(req => req.roleRequested === 'ADMIN');
-            setRequests(adminRequests);
-        } catch (error) {
-            console.error('Error loading requests:', error);
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    async function handleApprove(request) {
-        try {
-            setProcessing(request.id);
-
-            // We expect request.uid to exist because users now sign up first
-            let userId = request.uid;
-
-            // FALLBACK for legacy requests without UID (won't happen for new flow)
-            // If we don't have a UID, we can't create the profile easily because we can't look up by email client-side.
-            if (!userId) {
-                // Try to see if we can create the user (if they truly didn't exist)
-                try {
-                    const tempPassword = generateRandomPassword();
-                    const userCredential = await createUserWithEmailAndPassword(auth, request.email, tempPassword);
-                    userId = userCredential.user.uid;
-                    await sendPasswordResetEmail(auth, request.email);
-                    alert(`Legacy request approved! Password reset sent to ${request.email}`);
-                } catch (err) {
-                    if (err.code === 'auth/email-already-in-use') {
-                        throw new Error("This user already exists in Auth but the request has no UID attached. Please UNLOCK/REJECT this request and ask the user to sign up again.");
-                    }
-                    throw err;
-                }
-            }
-
-            // Create Firestore user document (Profile)
-            // Note: If the user already logged in once, this might overwrite? 
-            // setDoc with { merge: true } is safer but for initial setup standard setDoc is okay.
-            const userRef = doc(db, 'companies', 'primecommerce', 'users', userId);
-            const userData = {
-                uid: userId, // Ensure UID matches Auth UID
-                name: request.name,
-                email: request.email,
-                role: 'admin',
-                companyId: 'primecommerce',
-                companyName: 'Prime Commerce',
-                status: 'admin',
-                isActive: true,
-                createdAt: new Date().toISOString()
-            };
-
-            await setDoc(userRef, userData);
-
-            // Update join request status
-            await JoinRequestService.updateRequestStatus(request.id, 'APPROVED');
-
-            // If we had a UID, we assume they know their password (set during signup)
-            // So we don't send a password reset unless we created a temp one above.
-            if (request.uid) {
-                alert('Admin approved successfully! They can now log in with their chosen password.');
-            }
-
-            loadRequests();
-        } catch (error) {
-            console.error('Error approving request:', error);
-            alert('Error approving request: ' + error.message);
-        } finally {
-            setProcessing(null);
-        }
-    }
-
-    async function handleReject(request) {
-        try {
-            setProcessing(request.id);
-            await JoinRequestService.updateRequestStatus(request.id, 'REJECTED');
-            alert('Request rejected');
-            loadRequests();
-        } catch (error) {
-            console.error('Error rejecting request:', error);
-            alert('Error rejecting request: ' + error.message);
-        } finally {
-            setProcessing(null);
-        }
-    }
-
-    function generateRandomPassword() {
-        return Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-10);
-    }
-
-    return (
-        <div className="min-h-screen bg-slate-50">
-            {/* Header */}
-            <header className="bg-white shadow-sm border-b border-slate-200">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-                    <div>
-                        <h1 className="text-2xl font-bold text-slate-900">Super Admin Portal</h1>
-                        <p className="text-sm text-slate-600">Prime Commerce</p>
-                    </div>
-                    <button
-                        onClick={logout}
-                        className="px-4 py-2 text-sm bg-slate-600 text-white rounded-md hover:bg-slate-700"
-                    >
-                        Logout
-                    </button>
-                </div>
-            </header>
-
-            {/* Main Content */}
-            <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <div className="mb-6">
-                    <h2 className="text-xl font-semibold text-slate-900 mb-1">Admin Join Requests</h2>
-                    <p className="text-slate-600 text-sm">Manage admin access requests for Prime Commerce</p>
-                </div>
-
-                {loading ? (
-                    <div className="text-center py-12">
-                        <div className="text-slate-600">Loading requests...</div>
-                    </div>
-                ) : requests.length === 0 ? (
-                    <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-12 text-center">
-                        <div className="text-slate-400 text-5xl mb-4">📭</div>
-                        <h3 className="text-lg font-medium text-slate-900 mb-2">No pending requests</h3>
-                        <p className="text-slate-600">All admin join requests have been processed.</p>
-                    </div>
-                ) : (
-                    <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-                        <table className="min-w-full divide-y divide-slate-200">
-                            <thead className="bg-slate-50">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                                        Name
-                                    </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                                        Email
-                                    </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                                        Requested On
-                                    </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                                        Actions
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-slate-200">
-                                {requests.map((request) => (
-                                    <tr key={request.id} className="hover:bg-slate-50">
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm font-medium text-slate-900">{request.name}</div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm text-slate-600">{request.email}</div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm text-slate-600">
-                                                {new Date(request.createdAt).toLocaleDateString()}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={() => handleApprove(request)}
-                                                    disabled={processing === request.id}
-                                                    className="inline-flex items-center px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                >
-                                                    ✓ Approve
-                                                </button>
-                                                <button
-                                                    onClick={() => handleReject(request)}
-                                                    disabled={processing === request.id}
-                                                    className="inline-flex items-center px-3 py-1.5 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                >
-                                                    ✗ Reject
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
->>>>>>> 0416bddd4c1124f7733b794279b8b41e74f5ad53
             </main>
         </div>
     );

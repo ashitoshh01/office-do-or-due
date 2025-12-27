@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
 import UploadModal from '../components/UploadModal';
-import { Check, Clock, AlertCircle, Briefcase, Hand, Trophy, Star } from 'lucide-react';
+import MediaModal from '../components/MediaModal';
+import ChatModal from '../components/ChatModal'; // NEW: ChatModal Import
+import { Check, Clock, AlertCircle, Briefcase, Hand, Trophy, Star, MessageSquare } from 'lucide-react'; // NEW: MessageSquare
 import { useTasks, useUpdateUserStatus, useUploadProof } from '../hooks/useReactQueryTasks';
 
 export default function EmployeeDashboard() {
@@ -15,6 +17,8 @@ export default function EmployeeDashboard() {
 
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [activeTaskId, setActiveTaskId] = useState(null);
+    const [previewMedia, setPreviewMedia] = useState(null); // NEW: Preview state
+    const [isChatOpen, setIsChatOpen] = useState(false); // NEW: Chat State
 
     const isRequestingTask = userProfile?.status === 'requesting_task';
 
@@ -133,22 +137,23 @@ export default function EmployeeDashboard() {
                                         {/* Task Attachment from Manager */}
                                         {task.attachmentUrl && (
                                             <div className="mb-2">
-                                                {task.attachmentType === 'link' ? (
-                                                    <a href={task.attachmentUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline flex items-center bg-blue-50 w-fit px-2 py-1 rounded">
-                                                        <Briefcase size={12} className="mr-1" />
-                                                        Open Attachment Link
-                                                    </a>
-                                                ) : (
-                                                    <a href={task.attachmentUrl} download={`attachment_${task.id}`} className="text-xs text-blue-600 hover:underline flex items-center bg-blue-50 w-fit px-2 py-1 rounded">
-                                                        <Briefcase size={12} className="mr-1" />
-                                                        Download Attachment
-                                                    </a>
-                                                )}
+                                                <button
+                                                    onClick={() => setPreviewMedia({ url: task.attachmentUrl, type: task.attachmentType })}
+                                                    className="text-xs text-blue-600 hover:underline flex items-center bg-blue-50 w-fit px-2 py-1 rounded border border-blue-100 hover:bg-blue-100 transition-colors"
+                                                >
+                                                    <Briefcase size={12} className="mr-1" />
+                                                    {task.attachmentType === 'link' ? 'Open Attachment Link' : 'Preview Attachment'}
+                                                </button>
                                             </div>
                                         )}
 
-                                        <div className="flex items-center gap-3 text-xs text-slate-400">
+                                        <div className="flex items-center gap-3 text-xs text-slate-400 mt-2">
                                             <span>Assigned: {new Date(task.createdAt).toLocaleDateString()}</span>
+                                            {task.deadline && (
+                                                <span className={`flex items-center gap-1 font-medium ${new Date(task.deadline) < new Date() && task.status !== 'verified' ? 'text-red-500' : 'text-slate-500'}`}>
+                                                    <Clock size={12} /> Due: {new Date(task.deadline).toLocaleString()}
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
 
@@ -176,6 +181,34 @@ export default function EmployeeDashboard() {
                         uploading={uploading}
                     />
                 )}
+
+                {/* Media Preview Modal */}
+                {previewMedia && (
+                    <MediaModal
+                        url={previewMedia.url}
+                        type={previewMedia.type}
+                        onClose={() => setPreviewMedia(null)}
+                    />
+                )}
+
+                {/* Floating Chat Button */}
+                <div className="fixed bottom-6 right-6 z-30">
+                    <button
+                        onClick={() => setIsChatOpen(true)}
+                        className="w-14 h-14 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-indigo-300 hover:bg-indigo-700 hover:scale-105 transition-all animate-bounce-slow"
+                    >
+                        <MessageSquare size={24} />
+                        <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>
+                    </button>
+                </div>
+
+                {/* Chat Modal */}
+                <ChatModal
+                    isOpen={isChatOpen}
+                    onClose={() => setIsChatOpen(false)}
+                    employeeId={userProfile?.uid}
+                    employeeName={userProfile?.name}
+                />
             </div>
         </Layout>
     );
