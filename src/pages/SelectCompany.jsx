@@ -39,8 +39,8 @@ export default function SelectCompany() {
                 setError(`Workspace '${slug}' not found. Please check the name.`);
             }
         } catch (err) {
-            console.error(err);
-            setError("Error finding workspace. Please try again.");
+            console.error("Firestore Error:", err);
+            setError(`Connection Error: ${err.message}`);
         } finally {
             setChecking(false);
         }

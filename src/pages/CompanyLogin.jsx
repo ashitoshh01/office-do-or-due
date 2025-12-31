@@ -50,9 +50,9 @@ export default function CompanyLogin() {
                 // Success! Redirect to dashboard
                 // Determine role dashboard
                 if (userProfile.role === 'manager') {
-                    navigate(`/${companyId}/manager`);
+                    navigate(`/${companyId}/manager/dashboard`);
                 } else {
-                    navigate(`/${companyId}/employee`);
+                    navigate(`/${companyId}/dashboard`);
                 }
             } else {
                 // Wrong company
@@ -70,7 +70,7 @@ export default function CompanyLogin() {
         setLoggingIn(true);
         setError('');
         try {
-            await login(email, password);
+            await login(email, password, companyId);
             // Effect above will handle redirect
         } catch (err) {
             console.error(err);
@@ -146,7 +146,7 @@ export default function CompanyLogin() {
                             Have a License Key? Activate Account
                         </Link>
                     </p>
-                    <Link to="/" className="text-slate-400 hover:text-slate-600 text-xs block">
+                    <Link to="/select-company" className="text-slate-400 hover:text-slate-600 text-xs block">
                         ← Switch Workspace
                     </Link>
                 </div>

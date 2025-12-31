@@ -1,61 +1,35 @@
 import React from 'react';
-<<<<<<< HEAD
 import { Toaster } from 'react-hot-toast';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-<<<<<<< HEAD
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
-import { AuthProvider } from './context/AuthContext';
-
-// Pages
-import SelectCompany from './pages/SelectCompany';
-import CompanyLogin from './pages/CompanyLogin';
-import Login from './pages/Login'; // Keep for generic fallback or admin? Or replace. Keeping 'Login' as fallback or for super admin?
-import Signup from './pages/Signup'; // We might need to make this company aware
-import CompleteProfile from './pages/CompleteProfile';
-import SeedData from './pages/SeedData'; // Can be removed later
-import SuperAdminDashboard from './pages/SuperAdminDashboard';
-
-// Dashboards
-=======
 import { AuthProvider, useAuth } from './context/AuthContext';
+
+// Components
 import ProtectedRoute from './components/ProtectedRoute';
-import Login from './pages/Login';
 import SkeletonLayout from './components/SkeletonLayout';
-import Signup from './pages/Signup';
-import CompleteProfile from './pages/CompleteProfile';
-import SeedData from './pages/SeedData';
-=======
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
-import ProtectedRoute from './components/ProtectedRoute';
->>>>>>> 2879b6dbdb81e4a0735402b73425adc7a3331a75
 
 // Auth Pages
-import CompanyLogin from './pages/Auth/CompanyLogin';
-import CompanySignup from './pages/Auth/CompanySignup';
+import SelectCompany from './pages/SelectCompany';
+import CompanyLogin from './pages/CompanyLogin';
+import Login from './pages/Login';
+import Signup from './pages/Signup';
+import CompleteProfile from './pages/CompleteProfile';
 
 // Dashboard Pages
->>>>>>> 0416bddd4c1124f7733b794279b8b41e74f5ad53
 import EmployeeDashboard from './pages/EmployeeDashboard';
 import ManagerDashboard from './pages/ManagerDashboard';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
+import LeaderboardPage from './pages/LeaderboardPage'; // NEW IMPORT
 import SetupPage from './pages/SetupPage';
 import TestConnection from './pages/TestConnection';
+import SeedData from './pages/SeedData';
 
-<<<<<<< HEAD
-// Components
-import ProtectedRoute from './components/ProtectedRoute';
-=======
 // Wrapper to handle redirection based on role
 function RootRedirect() {
   const { currentUser, userProfile, loading } = useAuth();
 
-<<<<<<< HEAD
   if (loading) return <SkeletonLayout />;
-=======
-  if (loading) return <div className="flex items-center justify-center h-screen">Loading...</div>;
->>>>>>> 2879b6dbdb81e4a0735402b73425adc7a3331a75
 
   if (!currentUser || !userProfile) {
     return <Navigate to="/primecommerce/login" />;
@@ -78,51 +52,48 @@ function RootRedirect() {
   return <Navigate to={`/${companySlug}/dashboard`} />;
 }
 
-import { QueryClientProvider } from '@tanstack/react-query';
-import { queryClient } from './lib/queryClient';
->>>>>>> 0416bddd4c1124f7733b794279b8b41e74f5ad53
-
 function App() {
   return (
-<<<<<<< HEAD
     <QueryClientProvider client={queryClient}>
       <Router>
         <AuthProvider>
           <Toaster position="top-right" />
           <div className="min-h-screen bg-[var(--background-color)] text-[var(--text-primary)] font-sans">
             <Routes>
+              {/* Root redirect */}
+              <Route path="/" element={<RootRedirect />} />
 
-              {/* LANDING: Select Company */}
-              {/* STATIC ROUTES */}
+              {/* Static/Utility Routes */}
               <Route path="/seed" element={<SeedData />} />
               <Route path="/complete-profile" element={<CompleteProfile />} />
+              <Route path="/test-connection" element={<TestConnection />} />
+              <Route path="/setup" element={<SetupPage />} />
 
-              {/* SUPER ADMIN (Hidden/Direct Access) */}
+              {/* Super Admin Routes */}
               <Route path="/login" element={<Login />} />
-
-              {/* LANDING: Select Company */}
-              <Route path="/" element={<SelectCompany />} />
-
-              {/* TENANT AUTH */}
-              <Route path="/:companyId/login" element={<CompanyLogin />} />
-              <Route path="/:companyId/signup" element={<Signup />} />
-
-
-
-              {/* SUPER ADMIN */}
               <Route
-                path="/super-admin"
+                path="/superadmin/dashboard"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requireSuperAdmin={true}>
                     <SuperAdminDashboard />
-                    {/* ideally we check role='super_admin' here */}
                   </ProtectedRoute>
                 }
               />
 
-              {/* TENANT DASHBOARDS */}
+              {/* Company Selection */}
+              <Route path="/select-company" element={<SelectCompany />} />
+
+              {/* Tenant Auth Routes */}
+              <Route path="/:companyId/login" element={<CompanyLogin />} />
+              <Route path="/:companyId/signup" element={<Signup />} />
+
+              {/* Prime Commerce Specific Routes */}
+              <Route path="/primecommerce/manager/login" element={<CompanyLogin role="manager" />} />
+              <Route path="/primecommerce/admin/login" element={<CompanyLogin role="admin" />} />
+
+              {/* Tenant Dashboard Routes */}
               <Route
-                path="/:companyId/employee"
+                path="/:companyId/dashboard"
                 element={
                   <ProtectedRoute allowedRoles={['employee']}>
                     <EmployeeDashboard />
@@ -131,7 +102,7 @@ function App() {
               />
 
               <Route
-                path="/:companyId/manager"
+                path="/:companyId/manager/dashboard"
                 element={
                   <ProtectedRoute allowedRoles={['manager']}>
                     <ManagerDashboard />
@@ -139,96 +110,39 @@ function App() {
                 }
               />
 
-              {/* Fallbacks / Legacy Redirects from old bookmarks if needed, 
-                  or just catch all to SelectCompany 
-              */}
-              <Route path="*" element={<SelectCompany />} />
+              {/* NEW: Leaderboard Route */}
+              <Route
+                path="/:companyId/leaderboard"
+                element={
+                  <ProtectedRoute allowedRoles={['manager', 'employee']}>
+                    <LeaderboardPage />
+                  </ProtectedRoute>
+                }
+              />
 
+              <Route
+                path="/:companyId/admin/dashboard"
+                element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <div className="p-8">
+                      <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+                      <p className="mt-4">Coming soon...</p>
+                    </div>
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Legacy redirects */}
+              <Route path="/user-dashboard" element={<Navigate to="/primecommerce/dashboard" />} />
+              <Route path="/manager-dashboard" element={<Navigate to="/primecommerce/manager/dashboard" />} />
+
+              {/* Fallback */}
+              <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </div>
         </AuthProvider>
       </Router>
     </QueryClientProvider>
-=======
-    <Router>
-      <AuthProvider>
-        <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
-          <Routes>
-            {/* Root redirect */}
-            <Route path="/" element={<RootRedirect />} />
-
-            {/* Legacy routes - redirect to company-specific */}
-            <Route path="/login" element={<Navigate to="/primecommerce/login" />} />
-            <Route path="/signup" element={<Navigate to="/primecommerce/signup" />} />
-
-            {/* Prime Commerce - Employee Routes */}
-            <Route path="/primecommerce/login" element={<CompanyLogin role="employee" />} />
-            <Route path="/primecommerce/signup" element={<CompanySignup role="employee" />} />
-
-            {/* Prime Commerce - Manager Routes */}
-            <Route path="/primecommerce/manager/login" element={<CompanyLogin role="manager" />} />
-            <Route path="/primecommerce/manager/signup" element={<CompanySignup role="manager" />} />
-
-            {/* Test Route */}
-            <Route path="/test-connection" element={<TestConnection />} />
-
-            {/* Prime Commerce - Admin Routes */}
-            <Route path="/primecommerce/admin/login" element={<CompanyLogin role="admin" />} />
-            <Route path="/primecommerce/admin/signup" element={<CompanySignup role="admin" />} />
-
-            {/* Setup Page for creating Super Admin */}
-            <Route path="/setup" element={<SetupPage />} />
-
-            {/* Super Admin Dashboard */}
-            <Route
-              path="/superadmin/dashboard"
-              element={
-                <ProtectedRoute requireSuperAdmin={true}>
-                  <SuperAdminDashboard />
-                </ProtectedRoute>
-              }
-            />
-
-            {/* Protected Dashboard Routes */}
-            <Route
-              path="/primecommerce/dashboard"
-              element={
-                <ProtectedRoute allowedRoles={['employee']}>
-                  <EmployeeDashboard />
-                </ProtectedRoute>
-              }
-            />
-
-            <Route
-              path="/primecommerce/manager/dashboard"
-              element={
-                <ProtectedRoute allowedRoles={['manager']}>
-                  <ManagerDashboard />
-                </ProtectedRoute>
-              }
-            />
-
-            {/* Admin Dashboard - placeholder for now */}
-            <Route
-              path="/primecommerce/admin/dashboard"
-              element={
-                <ProtectedRoute allowedRoles={['admin']}>
-                  <div className="p-8">
-                    <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-                    <p className="mt-4">Coming soon...</p>
-                  </div>
-                </ProtectedRoute>
-              }
-            />
-
-            {/* Legacy dashboard routes - redirect to company-specific */}
-            <Route path="/user-dashboard" element={<Navigate to="/primecommerce/dashboard" />} />
-            <Route path="/manager-dashboard" element={<Navigate to="/primecommerce/manager/dashboard" />} />
-          </Routes>
-        </div>
-      </AuthProvider>
-    </Router>
->>>>>>> 2879b6dbdb81e4a0735402b73425adc7a3331a75
   );
 }
 

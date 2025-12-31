@@ -30,10 +30,24 @@ service cloud.firestore {
         // We verify the requester has 'manager' role in this specific company
         allow read: if get(/databases/$(database)/documents/companies/$(companyId)/users/$(request.auth.uid)).data.role == 'manager';
         
+        // Managers can update employee profiles (for task assignment status updates)
+        allow write: if get(/databases/$(database)/documents/companies/$(companyId)/users/$(request.auth.uid)).data.role == 'manager';
+        
         // Nested Activities
         match /activities/{activityId} {
+           // Employee can read/write their own activities
            allow read, write: if isUser(userId);
+           // Manager can read/write all activities in their company
            allow read, write: if get(/databases/$(database)/documents/companies/$(companyId)/users/$(request.auth.uid)).data.role == 'manager';
+        }
+      }
+      
+      // Conversations Collection (Chat Feature)
+      match /conversations/{employeeId} {
+        match /messages/{messageId} {
+          // Allow if: user is the employee OR user is a manager in this company
+          allow read, write: if isUser(employeeId) || 
+            get(/databases/$(database)/documents/companies/$(companyId)/users/$(request.auth.uid)).data.role == 'manager';
         }
       }
       

@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
 import UploadModal from '../components/UploadModal';
-import { Check, Clock, AlertCircle, Briefcase, Hand, Trophy, Star } from 'lucide-react';
-import { useTasks, useUpdateUserStatus, useUploadProof } from '../hooks/useReactQueryTasks';
+import MediaModal from '../components/MediaModal';
+import ChatModal from '../components/ChatModal'; // NEW: ChatModal Import
+import { Check, Clock, AlertCircle, Briefcase, Hand, Trophy, Star, MessageSquare, Medal, Award } from 'lucide-react';
+import { useTasks, useUpdateUserStatus, useUploadProof, useLeaderboard } from '../hooks/useReactQueryTasks';
 
 export default function EmployeeDashboard() {
     const { userProfile } = useAuth();
@@ -12,15 +14,34 @@ export default function EmployeeDashboard() {
     const { data: tasks = [], isLoading: loading } = useTasks(userProfile);
     const { mutate: updateUserStatus, isLoading: updatingStatus } = useUpdateUserStatus(userProfile);
     const { mutate: uploadProof, isLoading: uploading } = useUploadProof(userProfile);
+    const { data: leaderboardData = [] } = useLeaderboard(userProfile);
 
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [activeTaskId, setActiveTaskId] = useState(null);
+    const [previewMedia, setPreviewMedia] = useState(null); // NEW: Preview state
+    const [isChatOpen, setIsChatOpen] = useState(false); // NEW: Chat State
 
-    const isRequestingTask = userProfile?.status === 'requesting_task';
+    // Local state for optimistic UI update
+    const [localStatus, setLocalStatus] = useState(userProfile?.status || 'active');
+
+    // Sync local status with userProfile when it changes
+    React.useEffect(() => {
+        if (userProfile?.status) {
+            setLocalStatus(userProfile.status);
+        }
+    }, [userProfile?.status]);
+
+    const isRequestingTask = localStatus === 'requesting_task';
 
     const toggleRequestWork = () => {
         const newStatus = isRequestingTask ? 'active' : 'requesting_task';
-        updateUserStatus({ newStatus });
+        setLocalStatus(newStatus); // Optimistic update
+        updateUserStatus({ newStatus }, {
+            onError: () => {
+                // Revert on error
+                setLocalStatus(userProfile?.status || 'active');
+            }
+        });
     };
 
     const handleUploadProof = (uploadPayload) => {
@@ -44,14 +65,52 @@ export default function EmployeeDashboard() {
 
     return (
         <Layout>
-            <div className="max-w-4xl mx-auto">
+            <div className="max-w-4xl mx-auto pt-6">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                     <div>
                         <h1 className="text-2xl font-bold text-slate-900">My Activities</h1>
                         <p className="text-sm text-slate-500">Complete challenges to earn points</p>
                     </div>
 
-                    <div className="flex flex-col md:flex-row items-start md:items-center gap-4 w-full md:w-auto">
+                    <div className="flex flex-col md:flex-row items-start md:items-center gap-3 w-full md:w-auto">
+                        {/* Rank Badge - NEW */}
+                        {(() => {
+                            // Calculate rank based on all employees
+                            const allEmployees = leaderboardData.length > 0 ? leaderboardData : [];
+                            const myPoints = userProfile?.pointsStats?.totalEarned || 0;
+                            const rank = allEmployees.findIndex(emp => emp.uid === userProfile?.uid) + 1;
+                            const totalEmployees = allEmployees.length;
+
+                            // Determine rank styling
+                            const getRankStyle = () => {
+                                if (rank === 1) return { bg: 'bg-gradient-to-br from-yellow-400 to-yellow-500', text: 'text-white', icon: '🥇', border: 'border-yellow-300', ring: 'ring-yellow-200' };
+                                if (rank === 2) return { bg: 'bg-gradient-to-br from-slate-300 to-slate-400', text: 'text-white', icon: '🥈', border: 'border-slate-300', ring: 'ring-slate-200' };
+                                if (rank === 3) return { bg: 'bg-gradient-to-br from-orange-400 to-orange-500', text: 'text-white', icon: '🥉', border: 'border-orange-300', ring: 'ring-orange-200' };
+                                if (rank <= 10) return { bg: 'bg-gradient-to-br from-indigo-500 to-indigo-600', text: 'text-white', icon: '⭐', border: 'border-indigo-300', ring: 'ring-indigo-200' };
+                                return { bg: 'bg-gradient-to-br from-slate-600 to-slate-700', text: 'text-white', icon: '🎯', border: 'border-slate-400', ring: 'ring-slate-300' };
+                            };
+
+                            const style = getRankStyle();
+
+                            return rank > 0 && (
+                                <div className={`flex items-center gap-3 ${style.bg} p-3 rounded-xl border-2 ${style.border} shadow-lg w-full md:w-auto justify-between md:justify-start ring-2 ${style.ring} transition-all hover:scale-105`}>
+                                    <div className="flex items-center gap-2">
+                                        <div className="text-3xl animate-bounce-slow">{style.icon}</div>
+                                        <div className="flex flex-col">
+                                            <span className={`${style.text} text-[9px] uppercase tracking-wider font-bold opacity-90`}>Your Rank</span>
+                                            <span className={`${style.text} font-black text-2xl leading-none`}>
+                                                #{rank}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className={`${style.text} text-xs opacity-80 font-semibold hidden md:block`}>
+                                        of {totalEmployees}
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
+                        {/* Points Badge */}
                         <div className="flex items-center gap-3 bg-white p-3 rounded-lg border border-yellow-200 shadow-sm w-full md:w-auto justify-between md:justify-start ring-1 ring-yellow-100">
                             <div className="p-2 bg-yellow-100 rounded-full text-yellow-600">
                                 <Trophy size={20} />
@@ -133,23 +192,38 @@ export default function EmployeeDashboard() {
                                         {/* Task Attachment from Manager */}
                                         {task.attachmentUrl && (
                                             <div className="mb-2">
-                                                {task.attachmentType === 'link' ? (
-                                                    <a href={task.attachmentUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline flex items-center bg-blue-50 w-fit px-2 py-1 rounded">
-                                                        <Briefcase size={12} className="mr-1" />
-                                                        Open Attachment Link
-                                                    </a>
-                                                ) : (
-                                                    <a href={task.attachmentUrl} download={`attachment_${task.id}`} className="text-xs text-blue-600 hover:underline flex items-center bg-blue-50 w-fit px-2 py-1 rounded">
-                                                        <Briefcase size={12} className="mr-1" />
-                                                        Download Attachment
-                                                    </a>
-                                                )}
+                                                <button
+                                                    onClick={() => setPreviewMedia({ url: task.attachmentUrl, type: task.attachmentType })}
+                                                    className="text-xs text-blue-600 hover:underline flex items-center bg-blue-50 w-fit px-2 py-1 rounded border border-blue-100 hover:bg-blue-100 transition-colors"
+                                                >
+                                                    <Briefcase size={12} className="mr-1" />
+                                                    {task.attachmentType === 'link' ? 'Open Attachment Link' : 'Preview Attachment'}
+                                                </button>
                                             </div>
                                         )}
 
-                                        <div className="flex items-center gap-3 text-xs text-slate-400">
+                                        <div className="flex items-center gap-3 text-xs text-slate-400 mt-2">
                                             <span>Assigned: {new Date(task.createdAt).toLocaleDateString()}</span>
+                                            {task.deadline && (
+                                                <span className={`flex items-center gap-1 font-medium ${new Date(task.deadline) < new Date() && task.status !== 'verified' ? 'text-red-500' : 'text-slate-500'}`}>
+                                                    <Clock size={12} /> Due: {new Date(task.deadline).toLocaleString()}
+                                                </span>
+                                            )}
                                         </div>
+
+                                        {/* Rejection Message */}
+                                        {task.status === 'rejected' && task.rejectionMessage && (
+                                            <div className="mt-3 bg-red-50 border-l-4 border-red-500 p-3 rounded">
+                                                <div className="flex items-start gap-2">
+                                                    <AlertCircle size={16} className="text-red-600 mt-0.5 shrink-0" />
+                                                    <div>
+                                                        <p className="text-xs font-bold text-red-800 mb-1">Rejection Reason:</p>
+                                                        <p className="text-xs text-red-700">{task.rejectionMessage}</p>
+                                                        <p className="text-[10px] text-red-600 mt-2 italic">Please fix the issue and resubmit before the deadline.</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="flex items-center gap-2">
@@ -158,7 +232,7 @@ export default function EmployeeDashboard() {
                                                 onClick={() => { setActiveTaskId(task.id); setShowUploadModal(true); }}
                                                 className="text-sm font-medium text-blue-600 hover:text-blue-800 px-3 py-1 rounded hover:bg-blue-50 transition-colors border border-blue-200 bg-white"
                                             >
-                                                Mark Done
+                                                Submit Work
                                             </button>
                                         )}
                                     </div>
@@ -176,6 +250,34 @@ export default function EmployeeDashboard() {
                         uploading={uploading}
                     />
                 )}
+
+                {/* Media Preview Modal */}
+                {previewMedia && (
+                    <MediaModal
+                        url={previewMedia.url}
+                        type={previewMedia.type}
+                        onClose={() => setPreviewMedia(null)}
+                    />
+                )}
+
+                {/* Floating Chat Button */}
+                <div className="fixed bottom-6 right-6 z-30">
+                    <button
+                        onClick={() => setIsChatOpen(true)}
+                        className="w-14 h-14 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-indigo-300 hover:bg-indigo-700 hover:scale-105 transition-all animate-bounce-slow"
+                    >
+                        <MessageSquare size={24} />
+                    </button>
+                </div>
+
+                {/* Chat Modal */}
+                <ChatModal
+                    isOpen={isChatOpen}
+                    onClose={() => setIsChatOpen(false)}
+                    employeeId={userProfile?.uid}
+                    employeeName={userProfile?.name}
+                    isEmployeeView={true}
+                />
             </div>
         </Layout>
     );

@@ -66,9 +66,11 @@ const UploadModal = ({ onClose, onUpload, uploading: externalUploading }) => {
     };
 
     const validateAndUpload = (file) => {
-        // Simple size validation (max 5MB just as an example default, kept tight for "proof")
-        if (file.size > 5 * 1024 * 1024) {
-            setError("File size exceeds 5MB limit.");
+        // Firestore has 1MB document limit. Base64 encoding increases size by ~33%.
+        // Safe limit: 700KB to ensure encoded data fits within 1MB limit
+        const MAX_SIZE = 700 * 1024; // 700KB
+        if (file.size > MAX_SIZE) {
+            setError(`File size exceeds ${(MAX_SIZE / 1024).toFixed(0)}KB limit. Please use a smaller file.`);
             return;
         }
         setError(null);
@@ -106,7 +108,7 @@ const UploadModal = ({ onClose, onUpload, uploading: externalUploading }) => {
                     </h3>
                     <button
                         onClick={handleClose}
-                        disabled={uploading}
+                        disabled={uploading && !error}
                         className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-full transition-all disabled:opacity-50"
                     >
                         <X size={20} />
@@ -248,7 +250,7 @@ const UploadModal = ({ onClose, onUpload, uploading: externalUploading }) => {
                 {/* Footer hint */}
                 {!uploading && uploadMode === 'file' && (
                     <div className="bg-slate-50 px-6 py-3 border-t border-slate-100 text-center">
-                        <p className="text-xs text-slate-500">Max file size: 5MB • Secure transmission</p>
+                        <p className="text-xs text-slate-500">Max file size: 700KB • Secure transmission</p>
                     </div>
                 )}
             </div>
