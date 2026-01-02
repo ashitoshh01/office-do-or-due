@@ -26,11 +26,11 @@ service cloud.firestore {
         // Owner can read/write their own profile
         allow read, write: if isUser(userId);
         
-        // Managers can read all employees in their company
-        // We verify the requester has 'manager' role in this specific company
-        allow read: if get(/databases/$(database)/documents/companies/$(companyId)/users/$(request.auth.uid)).data.role == 'manager';
+        // Read: Allow if user is a member of this company (exists in users collection)
+        // This enables Leaderboard visibility for all employees
+        allow read: if exists(/databases/$(database)/documents/companies/$(companyId)/users/$(request.auth.uid));
         
-        // Managers can update employee profiles (for task assignment status updates)
+        // Write: Managers can update employee profiles (e.g. assigning tasks)
         allow write: if get(/databases/$(database)/documents/companies/$(companyId)/users/$(request.auth.uid)).data.role == 'manager';
         
         // Nested Activities
@@ -45,9 +45,10 @@ service cloud.firestore {
       // Conversations Collection (Chat Feature)
       match /conversations/{employeeId} {
         match /messages/{messageId} {
-          // Allow if: user is the employee OR user is a manager in this company
-          allow read, write: if isUser(employeeId) || 
-            get(/databases/$(database)/documents/companies/$(companyId)/users/$(request.auth.uid)).data.role == 'manager';
+          // Allow if: user is the employee
+          allow read, write: if isUser(employeeId);
+          // Allow if: user is a manager in this company
+          allow read, write: if get(/databases/$(database)/documents/companies/$(companyId)/users/$(request.auth.uid)).data.role == 'manager';
         }
       }
       
