@@ -213,7 +213,15 @@ export default function ManagerDashboard() {
 
                     <div className="px-4 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center justify-between">
                         <span className="flex items-center gap-2"><Users size={14} /> Employees</span>
-                        <span className="bg-slate-700 px-2 py-0.5 rounded-full text-[10px]">{filteredEmployees.length}</span>
+                        <div className="flex items-center gap-2">
+                            {/* Global Unread Badge */}
+                            {employees.reduce((acc, e) => acc + (e.unreadCountForManager || 0), 0) > 0 && (
+                                <span className="bg-red-600 text-white px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm animate-pulse">
+                                    {employees.reduce((acc, e) => acc + (e.unreadCountForManager || 0), 0)} new
+                                </span>
+                            )}
+                            <span className="bg-slate-700 px-2 py-0.5 rounded-full text-[10px]">{filteredEmployees.length}</span>
+                        </div>
                     </div>
 
                     {filteredEmployees.length === 0 ? (
@@ -249,6 +257,13 @@ export default function ManagerDashboard() {
                                                             <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
                                                         </span>
                                                     )}
+                                                    {/* Unread Chat Badge */}
+                                                    {emp.unreadCountForManager > 0 && (
+                                                        <span className="flex h-2 w-2 relative" title="Unread Messages">
+                                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-600"></span>
+                                                        </span>
+                                                    )}
                                                     {hasPending && (
                                                         <span className="flex h-2 w-2 relative" title="Unverified Proofs">
                                                             <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
@@ -261,12 +276,20 @@ export default function ManagerDashboard() {
                                                 </div>
                                             </div>
 
-                                            {/* Activity Indicator (Right Side) - Only show if > 0 */}
-                                            {hasPending && actualPendingCount > 0 && (
-                                                <div className="bg-red-500 h-5 min-w-[20px] px-1 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm">
-                                                    {actualPendingCount}
-                                                </div>
-                                            )}
+                                            {/* Activity Indicator (Right Side) - Prioritize Chat > Pending */}
+                                            <div className="flex items-center gap-1">
+                                                {emp.unreadCountForManager > 0 && (
+                                                    <div className="bg-indigo-600 h-5 min-w-[20px] px-1.5 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm border border-white/20">
+                                                        <MessageSquare size={10} className="mr-0.5" />
+                                                        {emp.unreadCountForManager}
+                                                    </div>
+                                                )}
+                                                {hasPending && actualPendingCount > 0 && (
+                                                    <div className="bg-red-500 h-5 min-w-[20px] px-1 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm">
+                                                        {actualPendingCount}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </button>
                                     </li>
                                 );
@@ -577,9 +600,14 @@ export default function ManagerDashboard() {
                         <div className="absolute bottom-6 right-6 z-30">
                             <button
                                 onClick={() => setIsChatOpen(true)}
-                                className="w-14 h-14 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-indigo-300 hover:bg-indigo-700 hover:scale-105 transition-all animate-bounce-slow"
+                                className="w-14 h-14 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-indigo-300 hover:bg-indigo-700 hover:scale-105 transition-all animate-bounce-slow relative"
                             >
                                 <MessageSquare size={24} />
+                                {currentSelectedEmployee?.unreadCountForManager > 0 && (
+                                    <span className="absolute -top-1 -right-1 h-6 w-6 bg-red-600 border-2 border-white rounded-full flex items-center justify-center text-xs font-bold animate-pulse shadow-md">
+                                        {currentSelectedEmployee.unreadCountForManager}
+                                    </span>
+                                )}
                             </button>
                         </div>
 
@@ -612,51 +640,53 @@ export default function ManagerDashboard() {
             </div >
 
             {/* Rejection Modal */}
-            {showRejectionModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-                        <div className="bg-red-600 p-4 flex items-center justify-between text-white">
-                            <h3 className="font-bold text-lg">Reject Task Proof</h3>
-                            <button
-                                onClick={() => setShowRejectionModal(false)}
-                                className="p-1 hover:bg-white/20 rounded-full transition-colors"
-                            >
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        <div className="p-6">
-                            <p className="text-sm text-slate-600 mb-4">
-                                Please explain why you're rejecting this proof. This message will be shown to the employee so they can fix the issue and resubmit.
-                            </p>
-
-                            <textarea
-                                value={rejectionMessage}
-                                onChange={(e) => setRejectionMessage(e.target.value)}
-                                placeholder="Example: The screenshot is blurry and doesn't clearly show the completed work. Please submit a clearer image."
-                                className="w-full min-h-[120px] p-3 border-2 border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all outline-none resize-none text-sm"
-                                autoFocus
-                            />
-
-                            <div className="flex gap-3 mt-6">
+            {
+                showRejectionModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+                            <div className="bg-red-600 p-4 flex items-center justify-between text-white">
+                                <h3 className="font-bold text-lg">Reject Task Proof</h3>
                                 <button
                                     onClick={() => setShowRejectionModal(false)}
-                                    className="flex-1 py-2.5 border-2 border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors"
+                                    className="p-1 hover:bg-white/20 rounded-full transition-colors"
                                 >
-                                    Cancel
+                                    <X size={20} />
                                 </button>
-                                <button
-                                    onClick={handleConfirmRejection}
-                                    disabled={!rejectionMessage.trim()}
-                                    className="flex-1 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    Confirm Rejection
-                                </button>
+                            </div>
+
+                            <div className="p-6">
+                                <p className="text-sm text-slate-600 mb-4">
+                                    Please explain why you're rejecting this proof. This message will be shown to the employee so they can fix the issue and resubmit.
+                                </p>
+
+                                <textarea
+                                    value={rejectionMessage}
+                                    onChange={(e) => setRejectionMessage(e.target.value)}
+                                    placeholder="Example: The screenshot is blurry and doesn't clearly show the completed work. Please submit a clearer image."
+                                    className="w-full min-h-[120px] p-3 border-2 border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all outline-none resize-none text-sm"
+                                    autoFocus
+                                />
+
+                                <div className="flex gap-3 mt-6">
+                                    <button
+                                        onClick={() => setShowRejectionModal(false)}
+                                        className="flex-1 py-2.5 border-2 border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleConfirmRejection}
+                                        disabled={!rejectionMessage.trim()}
+                                        className="flex-1 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Confirm Rejection
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
         </div >
     );
 }

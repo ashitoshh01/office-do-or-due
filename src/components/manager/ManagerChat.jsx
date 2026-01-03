@@ -5,18 +5,24 @@ import { Send, MessageSquare } from 'lucide-react';
 
 export default function ManagerChat({ employeeId, employeeName }) {
     const { userProfile } = useAuth();
-    const { messages, loading, sendMessage } = useChat(userProfile?.companyId, employeeId);
+    const { messages, loading, sendMessage, markAsRead } = useChat(userProfile?.companyId, employeeId);
     const [newMessage, setNewMessage] = useState('');
     const messagesEndRef = useRef(null);
 
-    // Auto-scroll removed as per user request to avoid page jumping
-    // const scrollToBottom = () => {
-    //     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    // };
+    // Mark as read when messages load/change
+    useEffect(() => {
+        if (messages.length > 0 && userProfile?.uid) {
+            markAsRead(userProfile.uid);
+        }
+    }, [messages, userProfile?.uid, markAsRead]);
 
-    // useEffect(() => {
-    //     scrollToBottom();
-    // }, [messages]);
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
+
+    useEffect(() => {
+        scrollToBottom();
+    }, [messages]);
 
 
     const handleSend = async (e) => {

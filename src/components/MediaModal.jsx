@@ -174,7 +174,7 @@ export default function MediaModal({ url, type, onClose }) {
                         {/* External Link & Download */}
                         <div className="w-px h-6 bg-slate-300 mx-1"></div>
                         <a
-                            href={url}
+                            href={url.match(/^https?:\/\//) ? url : `https://${url}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="p-2 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
@@ -213,7 +213,7 @@ export default function MediaModal({ url, type, onClose }) {
                                 <p className="text-xs text-slate-400 mb-4 break-all max-w-md">{url}</p>
                             </div>
                             <a
-                                href={url}
+                                href={url.match(/^https?:\/\//) ? url : `https://${url}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-xl font-bold hover:from-blue-700 hover:to-blue-600 transition shadow-lg shadow-blue-500/30 active:scale-95"

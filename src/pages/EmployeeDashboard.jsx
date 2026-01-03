@@ -5,7 +5,7 @@ import UploadModal from '../components/UploadModal';
 import MediaModal from '../components/MediaModal';
 import ChatModal from '../components/ChatModal'; // NEW: ChatModal Import
 import { Check, Clock, AlertCircle, Briefcase, Hand, Trophy, Star, MessageSquare, Medal, Award } from 'lucide-react';
-import { useTasks, useUpdateUserStatus, useUploadProof, useLeaderboard } from '../hooks/useReactQueryTasks';
+import { useTasks, useUpdateUserStatus, useUploadProof, useLeaderboard, useChat } from '../hooks/useReactQueryTasks';
 
 export default function EmployeeDashboard() {
     const { userProfile } = useAuth();
@@ -15,6 +15,10 @@ export default function EmployeeDashboard() {
     const { mutate: updateUserStatus, isLoading: updatingStatus } = useUpdateUserStatus(userProfile);
     const { mutate: uploadProof, isLoading: uploading } = useUploadProof(userProfile);
     const { data: leaderboardData = [] } = useLeaderboard(userProfile);
+
+    // Chat Hooks for Notification
+    const { messages: chatMessages } = useChat(userProfile?.companyId, userProfile?.uid);
+    const unreadCount = chatMessages ? chatMessages.filter(m => !m.read && m.senderId !== userProfile?.uid).length : 0;
 
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [activeTaskId, setActiveTaskId] = useState(null);
@@ -264,9 +268,18 @@ export default function EmployeeDashboard() {
                 <div className="fixed bottom-6 right-6 z-30">
                     <button
                         onClick={() => setIsChatOpen(true)}
-                        className="w-14 h-14 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-indigo-300 hover:bg-indigo-700 hover:scale-105 transition-all animate-bounce-slow"
+                        className="w-14 h-14 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-indigo-300 hover:bg-indigo-700 hover:scale-105 transition-all animate-bounce-slow relative"
                     >
                         <MessageSquare size={24} />
+                        {/* Notification Badge */}
+                        {unreadCount > 0 && (
+                            <span className="absolute -top-1 -right-1 flex h-5 w-5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-5 w-5 bg-red-600 text-white text-[10px] font-bold items-center justify-center border-2 border-white">
+                                    {unreadCount}
+                                </span>
+                            </span>
+                        )}
                     </button>
                 </div>
 

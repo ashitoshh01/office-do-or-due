@@ -32,27 +32,42 @@ export function useTasks(userProfile) {
 }
 
 // 2. Fetch Employees (Manager View)
+// 2. Fetch Employees (Manager View) - Real-time
 export function useEmployees(userProfile) {
-    return useQuery({
-        queryKey: ['employees', userProfile?.companyId],
-        queryFn: async () => {
-            if (!userProfile?.companyId) return [];
-            const usersRef = collection(db, "companies", userProfile.companyId, "users");
-            const snapshot = await getDocs(usersRef);
+    const [employees, setEmployees] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        if (!userProfile?.companyId) {
+            setEmployees([]);
+            // Only stop loading if we actually have a profile (or failure)
+            if (userProfile === null) setIsLoading(false);
+            return;
+        }
+
+        setIsLoading(true);
+        const usersRef = collection(db, "companies", userProfile.companyId, "users");
+
+        const unsubscribe = onSnapshot(usersRef, (snapshot) => {
             const empList = snapshot.docs.map(doc => doc.data()).filter(u => u.role !== 'manager');
 
             // Sorting Logic
-            return empList.sort((a, b) => {
+            const sorted = empList.sort((a, b) => {
                 // Priority 1: Requesting Task (Active Status)
                 if (a.status === 'requesting_task' && b.status !== 'requesting_task') return -1;
                 if (b.status === 'requesting_task' && a.status !== 'requesting_task') return 1;
 
-                // Priority 2: Pending Verifications (Red Dot logic)
+                // Priority 2: Unread Messages (NEW!)
+                const unreadA = a.unreadCountForManager || 0;
+                const unreadB = b.unreadCountForManager || 0;
+                if (unreadA !== unreadB) return unreadB - unreadA;
+
+                // Priority 3: Pending Verifications
                 const pendingA = a.pendingTaskCount || 0;
                 const pendingB = b.pendingTaskCount || 0;
                 if (pendingA !== pendingB) return pendingB - pendingA;
 
-                // Priority 3: Status Score
+                // Priority 4: Status Score
                 const statusScore = (status) => {
                     if (status === 'available') return 3;
                     if (status === 'busy') return 2;
@@ -60,10 +75,18 @@ export function useEmployees(userProfile) {
                 };
                 return statusScore(b.status) - statusScore(a.status);
             });
-        },
-        enabled: !!userProfile?.companyId,
-        refetchInterval: 10000, // Poll every 10s for status updates/notifications
-    });
+
+            setEmployees(sorted);
+            setIsLoading(false);
+        }, (error) => {
+            console.error("Error fetching employees:", error);
+            setIsLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, [userProfile?.companyId]);
+
+    return { data: employees, isLoading };
 }
 
 // 3. Fetch Specific Employee Tasks (Manager View)
@@ -322,11 +345,56 @@ export function useChat(companyId, employeeId) {
                 createdAt: new Date().toISOString(),
                 read: false
             });
+
+            // Update unread counts on the User Document (for efficient dashboard badges)
+            const userRef = doc(db, "companies", companyId, "users", employeeId);
+
+            // If sender is the employee -> Manager has unread messages
+            if (senderId === employeeId) {
+                await updateDoc(userRef, {
+                    unreadCountForManager: increment(1)
+                });
+            } else {
+                // Sender is Manager -> Employee has unread messages
+                await updateDoc(userRef, {
+                    unreadCountForEmployee: increment(1)
+                });
+            }
+
         } catch (error) {
             console.error("Error sending message:", error);
             toast.error("Failed to send message");
         }
     };
 
-    return { messages, loading, sendMessage };
+    // Calculate unread count (messages not sent by me that are unread)
+    // We need the currentUserId to know which messages are "mine". 
+    // Since this hook is general, we might need to pass currentUserId or derive it.
+    // Ideally, the component passes it, or we filter in the component. 
+    // BUT, for a clean hook, let's return the simplified list and helpers.
+
+    const markAsRead = async (readerId) => {
+        if (!companyId || !employeeId || !readerId) return;
+
+        // 1. Mark individual messages as read (Visual read receipts)
+        const unreadMessages = messages.filter(m => !m.read && m.senderId !== readerId);
+
+        const updatePromises = unreadMessages.map(msg => {
+            const msgRef = doc(db, "companies", companyId, "conversations", employeeId, "messages", msg.id);
+            return updateDoc(msgRef, { read: true });
+        });
+        await Promise.all(updatePromises);
+
+        // 2. Clear unread count on User Profile (Badge reset)
+        // If I am the employee reading, clear `unreadCountForEmployee`
+        // If I am the manager reading, clear `unreadCountForManager`
+        const userRef = doc(db, "companies", companyId, "users", employeeId);
+        if (readerId === employeeId) {
+            await updateDoc(userRef, { unreadCountForEmployee: 0 });
+        } else {
+            await updateDoc(userRef, { unreadCountForManager: 0 });
+        }
+    };
+
+    return { messages, loading, sendMessage, markAsRead };
 }

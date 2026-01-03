@@ -1,39 +1,54 @@
-  rules_version = '2';
+rules_version = '2';
 
-  service cloud.firestore {
-    match /databases/{database}/documents {
+service cloud.firestore {
+  match /databases/{database}/documents {
 
-      // Helper functions
-      function isAuthenticated() {
-        return request.auth != null;
-      }
-      
-      function isUser(uid) {
-        return isAuthenticated() && request.auth.uid == uid;
-      }
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isUser(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
 
-      // Companies Collection
-      match /companies/{companyId} {
-        // Allow reading company info (name, codes) to check existence during signup/login
-        allow read: if true; 
-        // Allow creation only if authenticated (super admin) - strictly speaking we should restrict this more
-        // but for now 'if true' or 'if isAuthenticated' for the dashboard to work
-        allow create: if true; 
-        allow update, delete: if true; // For Super Admin Dashboard
+    // Companies Collection
+    match /companies/{companyId} {
+      // Allow reading company info (name, codes) to check existence during signup/login
+      allow read: if true; 
+      // Allow creation only if authenticated (super admin) - strictly speaking we should restrict this more
+      // but for now 'if true' or 'if isAuthenticated' for the dashboard to work
+      allow create: if true; 
+      allow update, delete: if true; // For Super Admin Dashboard
 
       // Nested Users Collection
       match /users/{userId} {
         // Owner can read/write their own profile
         allow read, write: if isUser(userId);
         
-        // Managers can read all employees in their company
-        // We verify the requester has 'manager' role in this specific company
-        allow read: if get(/databases/$(database)/documents/companies/$(companyId)/users/$(request.auth.uid)).data.role == 'manager';
+        // Read: Allow if user is a member of this company (exists in users collection)
+        // This enables Leaderboard visibility for all employees
+        allow read: if exists(/databases/$(database)/documents/companies/$(companyId)/users/$(request.auth.uid));
+        
+        // Write: Managers can update employee profiles (e.g. assigning tasks)
+        allow write: if get(/databases/$(database)/documents/companies/$(companyId)/users/$(request.auth.uid)).data.role == 'manager';
         
         // Nested Activities
         match /activities/{activityId} {
+           // Employee can read/write their own activities
            allow read, write: if isUser(userId);
+           // Manager can read/write all activities in their company
            allow read, write: if get(/databases/$(database)/documents/companies/$(companyId)/users/$(request.auth.uid)).data.role == 'manager';
+        }
+      }
+      
+      // Conversations Collection (Chat Feature)
+      match /conversations/{employeeId} {
+        match /messages/{messageId} {
+          // Allow if: user is the employee
+          allow read, write: if isUser(employeeId);
+          // Allow if: user is a manager in this company
+          allow read, write: if get(/databases/$(database)/documents/companies/$(companyId)/users/$(request.auth.uid)).data.role == 'manager';
         }
       }
       
@@ -43,12 +58,26 @@
       }
     }
 
-      // Collection Group Query for 'users'
-      // Required for AuthContext to find the user's company by their UID
-      match /{path=**}/users/{userId} {
-        allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
-        // Allow writing only if it's their own doc (e.g. lastLoginAt)
-        allow write: if isAuthenticated() && userId == request.auth.uid;
-      }
+    // Collection Group Query for 'users'
+    // Required for AuthContext to find the user's company by their UID
+    match /{path=**}/users/{userId} {
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      // Allow writing only if it's their own doc (e.g. lastLoginAt)
+      allow write: if isAuthenticated() && userId == request.auth.uid;
+    }
+
+    // Join Requests Collection
+    match /joinRequests/{requestId} {
+      // Anyone can create a join request (unauthenticated signup)
+      allow create: if true;
+      
+      // Authenticated users can read requests
+      allow read: if isAuthenticated();
+      
+      // Only specific approvers can update the status
+      // Managers/Admins can update join requests where they are the approver
+      allow update: if isAuthenticated() && 
+        (request.auth.token.email == resource.data.approverEmail);
     }
   }
+}
