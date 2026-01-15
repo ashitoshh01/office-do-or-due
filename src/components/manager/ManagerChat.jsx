@@ -7,6 +7,7 @@ export default function ManagerChat({ employeeId, employeeName }) {
     const { userProfile } = useAuth();
     const { messages, loading, sendMessage, markAsRead } = useChat(userProfile?.companyId, employeeId);
     const [newMessage, setNewMessage] = useState('');
+    const [isSending, setIsSending] = useState(false);
     const messagesEndRef = useRef(null);
 
     // Mark as read when messages load/change
@@ -33,13 +34,18 @@ export default function ManagerChat({ employeeId, employeeName }) {
             return;
         }
 
-        await sendMessage(newMessage, userProfile.uid);
-        setNewMessage('');
+        try {
+            setIsSending(true);
+            await sendMessage(newMessage, userProfile.uid);
+            setNewMessage('');
+        } finally {
+            setIsSending(false);
+        }
     };
 
 
     return (
-        <div className="flex flex-col h-[500px] bg-white overflow-hidden">
+        <div className="flex flex-col h-full bg-white overflow-hidden">
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50">
                 {loading ? (
@@ -57,7 +63,7 @@ export default function ManagerChat({ employeeId, employeeName }) {
                                     ? 'bg-blue-600 text-white rounded-tr-none'
                                     : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none'
                                     }`}>
-                                    <p>{msg.text}</p>
+                                    <p className="break-words">{msg.text}</p>
                                     <span className={`text-[10px] block mt-1 ${isMe ? 'text-blue-100' : 'text-slate-400'}`}>
                                         {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                     </span>
@@ -80,7 +86,7 @@ export default function ManagerChat({ employeeId, employeeName }) {
                 />
                 <button
                     type="submit"
-                    disabled={!newMessage.trim()}
+                    disabled={!newMessage.trim() || isSending}
                     className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 >
                     <Send size={18} />

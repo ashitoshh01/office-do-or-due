@@ -249,7 +249,7 @@ export default function ManagerDashboard() {
                                         >
                                             <div className="flex-1 min-w-0 mr-2">
                                                 <div className="flex items-center gap-2">
-                                                    <div className="font-medium text-sm truncate">{emp.name}</div>
+                                                    <div className="font-medium text-sm truncate max-w-[120px]">{emp.name}</div>
                                                     {/* Status Badges */}
                                                     {isRequesting && (
                                                         <span className="flex h-2 w-2 relative" title="Requesting Work">
@@ -310,7 +310,7 @@ export default function ManagerDashboard() {
                 {currentSelectedEmployee ? (
                     <>
                         <header className="bg-white shadow-sm shrink-0 p-4 md:px-8 border-b border-slate-200 z-10">
-                            <div className="flex items-center justify-between">
+                            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                                 <div>
                                     <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
                                         {currentSelectedEmployee.name}
@@ -336,7 +336,7 @@ export default function ManagerDashboard() {
                         </header>
 
                         <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-50">
-                            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
 
                                 {/* Left Col: Tasks & Activity */}
                                 <div className="xl:col-span-2 space-y-6">
@@ -353,9 +353,9 @@ export default function ManagerDashboard() {
                                             ) : (
                                                 employeeTasks.map(task => (
                                                     <div key={task.id} className="p-4 hover:bg-slate-50/50 transition-colors">
-                                                        <div className="flex justify-between items-start gap-4">
+                                                        <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
                                                             <div className="flex-1">
-                                                                <div className="flex items-center gap-2 mb-1">
+                                                                <div className="flex flex-wrap items-center gap-2 mb-1">
                                                                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${task.status === 'verified' ? 'bg-green-100 text-green-700' :
                                                                         task.status === 'verification_pending' ? 'bg-orange-100 text-orange-700 animate-pulse' :
                                                                             task.status === 'rejected' ? 'bg-red-100 text-red-700' :
@@ -369,7 +369,7 @@ export default function ManagerDashboard() {
                                                                         <Star size={10} fill="currentColor" /> {task.points}
                                                                     </span>
                                                                 </div>
-                                                                <p className="text-sm text-slate-600 mb-2">{task.description}</p>
+                                                                <p className="text-sm text-slate-600 mb-2 break-words">{task.description}</p>
 
                                                                 <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400">
                                                                     <span className="flex items-center gap-1">
@@ -406,7 +406,7 @@ export default function ManagerDashboard() {
 
                                                             {/* Actions */}
                                                             {task.status === 'verification_pending' && (
-                                                                <div className="flex flex-col gap-2 shrink-0">
+                                                                <div className="flex flex-row sm:flex-col gap-2 shrink-0 self-end sm:self-start mt-2 sm:mt-0">
                                                                     <button
                                                                         onClick={() => verifyTask(task.id, 'verified', task.points || 0)}
                                                                         className="px-3 py-1.5 bg-green-600 text-white text-xs font-bold rounded shadow-sm hover:bg-green-700 transition active:scale-95"

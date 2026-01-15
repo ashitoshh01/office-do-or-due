@@ -180,9 +180,9 @@ export default function EmployeeDashboard() {
                     ) : (
                         <ul className="divide-y divide-slate-100">
                             {tasks.map(task => (
-                                <li key={task.id} className="p-5 hover:bg-slate-50 transition-colors flex items-center justify-between group">
-                                    <div className="flex-1 mr-4">
-                                        <div className="flex items-center justify-between mb-1">
+                                <li key={task.id} className="p-5 hover:bg-slate-50 transition-colors flex flex-col sm:flex-row items-start sm:items-center justify-between group gap-4">
+                                    <div className="flex-1 w-full sm:mr-4">
+                                        <div className="flex flex-wrap items-center justify-between mb-1 gap-2">
                                             <div className="flex items-center gap-2">
                                                 <h3 className={`font-medium text-slate-900 ${task.status === 'verified' ? 'line-through text-slate-400' : ''}`}>{task.title}</h3>
                                                 <span className="bg-yellow-100 text-yellow-800 font-bold px-2 py-0.5 rounded text-[10px] flex items-center gap-1">
@@ -191,7 +191,7 @@ export default function EmployeeDashboard() {
                                             </div>
                                             {getStatusBadge(task.status)}
                                         </div>
-                                        {task.description && <p className="text-sm text-slate-600 mb-2">{task.description}</p>}
+                                        {task.description && <p className="text-sm text-slate-600 mb-2 break-words">{task.description}</p>}
 
                                         {/* Task Attachment from Manager */}
                                         {task.attachmentUrl && (
@@ -230,7 +230,7 @@ export default function EmployeeDashboard() {
                                         )}
                                     </div>
 
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 self-end sm:self-center">
                                         {(task.status === 'assigned' || task.status === 'rejected') && (
                                             <button
                                                 onClick={() => { setActiveTaskId(task.id); setShowUploadModal(true); }}

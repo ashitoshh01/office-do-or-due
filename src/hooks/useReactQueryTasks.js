@@ -346,6 +346,13 @@ export function useChat(companyId, employeeId) {
                 read: false
             });
 
+        } catch (error) {
+            console.error("Error creating message doc:", error);
+            toast.error("Msg Error: " + error.message);
+            return; // Stop if message failed
+        }
+
+        try {
             // Update unread counts on the User Document (for efficient dashboard badges)
             const userRef = doc(db, "companies", companyId, "users", employeeId);
 
@@ -362,8 +369,9 @@ export function useChat(companyId, employeeId) {
             }
 
         } catch (error) {
-            console.error("Error sending message:", error);
-            toast.error("Failed to send message");
+            console.error("Error updating user count:", error);
+            // Non-critical error, maybe don't block the UI but warn
+            toast.error("Count Error: " + error.message);
         }
     };
 

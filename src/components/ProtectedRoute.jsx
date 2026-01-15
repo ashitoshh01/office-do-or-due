@@ -16,7 +16,7 @@ export default function ProtectedRoute({ children, allowedRoles, requireSuperAdm
         if (params.companyId) {
             return <Navigate to={`/${params.companyId}/login`} />;
         }
-        return <Navigate to="/primecommerce/login" />;
+        return <Navigate to="/select-company" />;
     }
 
     const companySlug = userProfile.companyId || 'primecommerce';

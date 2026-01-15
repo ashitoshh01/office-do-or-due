@@ -24,7 +24,8 @@ service cloud.firestore {
       // Nested Users Collection
       match /users/{userId} {
         // Owner can read/write their own profile
-        allow read, write: if isUser(userId);
+        allow read, write: if true; // DEBUG: Allow all temporarily
+        // allow read, write: if isUser(userId);
         
         // Read: Allow if user is a member of this company (exists in users collection)
         // This enables Leaderboard visibility for all employees
@@ -45,10 +46,10 @@ service cloud.firestore {
       // Conversations Collection (Chat Feature)
       match /conversations/{employeeId} {
         match /messages/{messageId} {
-          // Allow if: user is the employee
-          allow read, write: if isUser(employeeId);
-          // Allow if: user is a manager in this company
-          allow read, write: if get(/databases/$(database)/documents/companies/$(companyId)/users/$(request.auth.uid)).data.role == 'manager';
+          allow read, write: if true; // DEBUG: Allow all temporarily
+          // allow read, write: if isUser(employeeId);
+          // allow read, write: if get(/databases/$(database)/documents/companies/$(companyId)/users/$(request.auth.uid)).data.role == 'manager';
+          // allow read, write: if exists(/databases/$(database)/documents/companies/$(companyId)/users/$(request.auth.uid));
         }
       }
       

@@ -60,7 +60,7 @@ export default function ChatModal({ isOpen, onClose, employeeId, employeeName, i
                 </div>
 
                 {/* Chat Content */}
-                <div className="h-[500px] bg-slate-50 relative">
+                <div className="h-[500px] max-h-[60vh] md:max-h-[80vh] bg-slate-50 relative">
                     <ErrorBoundary>
                         <ManagerChat
                             key={employeeId} // Force remount on change

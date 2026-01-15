@@ -32,7 +32,7 @@ function RootRedirect() {
   if (loading) return <SkeletonLayout />;
 
   if (!currentUser || !userProfile) {
-    return <Navigate to="/primecommerce/login" />;
+    return <Navigate to="/select-company" />;
   }
 
   // Redirect based on role
